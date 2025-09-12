@@ -1,0 +1,4 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+cc 87199bb41a584b9c2d5fb2bb926a321d360ecb9f10bb55616065b43100e89bc2 # shrinks to filename = "A", ext = "jpg"

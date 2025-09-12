@@ -1,0 +1,45 @@
+[package]
+name = "ptui"
+version = "1.0.1"
+edition = "2024"
+authors = ["Christian Clare"]
+description = "Picture TUI"
+license = "MIT"
+repository = "https://github.com/narbs/ptui"
+categories = ["image","photo","TUI"]
+keywords = ["chafa","image","picture","photo","browser","TUI"]
+
+[package.metadata.aur]
+depends = ["chafa", "imagemagick"]
+
+[[bin]]
+name = "ptui"
+path = "src/main.rs"
+
+[lib]
+name = "ptui"
+path = "src/lib.rs"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.29.0"
+ansi-to-tui = "7.0.0"
+dirs = "6.0.0"
+fluent = "0.17.0"
+fluent-langneg = "0.14.1"
+serde_json = "1.0.143"
+serde = { version = "1.0.219", features = ["derive"] }
+unic-langid = "0.9.6"
+notify = "8.2.0"
+terani = "0.1.0"
+content_inspector = "0.2.4"
+
+[build-dependencies]
+cc = "1.2.37"
+
+[dev-dependencies]
+tempfile = "3.12"
+proptest = "1.5"
+mockall = "0.13"
+rstest = "0.26.1"
+insta = "1.41"
