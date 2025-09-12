@@ -4,6 +4,8 @@ PTUI - Picture TUI
 A terminal-based image viewer written in Rust that provides a file browser
 interface with real-time image preview capabilities.
 
+![PTUI - Picture TUI](docs/ptui_image.png)
+
 Features
 --------
 - Support for common image formats
