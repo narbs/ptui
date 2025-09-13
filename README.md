@@ -34,11 +34,13 @@ Installation
 ------------
 
 From Source:
+
     yay -S cargo
     cargo build --release
     cargo install --path .
 
 From AUR (Arch Linux):
+
     yay -S ptui-bin
 
 Usage
