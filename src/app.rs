@@ -26,7 +26,8 @@ const EMBEDDED_LOGO: &str = r#"
 ░░         ░       ░░░ ░ ░  ▒ ░
              ░       ░      ░  
 
-{app_subtitle}"#;
+{app_subtitle}
+v{version}"#;
 
 pub struct ChafaTui {
     file_browser: FileBrowser,

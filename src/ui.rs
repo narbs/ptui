@@ -225,12 +225,14 @@ impl UIRenderer {
             
             for span in &line.spans {
                 let content = span.content.to_string();
-                // Replace placeholder with localized subtitle
-                let localized_content = if content.contains("{app_subtitle}") {
-                    content.replace("{app_subtitle}", &localization.get("app_subtitle"))
-                } else {
-                    content
-                };
+                // Replace placeholders with localized subtitle and version
+                let mut localized_content = content;
+                if localized_content.contains("{app_subtitle}") {
+                    localized_content = localized_content.replace("{app_subtitle}", &localization.get("app_subtitle"));
+                }
+                if localized_content.contains("{version}") {
+                    localized_content = localized_content.replace("{version}", env!("CARGO_PKG_VERSION"));
+                }
                 
                 new_line.spans.push(ratatui::text::Span {
                     content: localized_content.into(),
@@ -572,7 +574,7 @@ mod tests {
         let localization = crate::localization::Localization::new("en").unwrap();
         let mut logo = Text::default();
         logo.lines.push(ratatui::text::Line::from(vec![
-            ratatui::text::Span::from("Test {app_subtitle} Logo")
+            ratatui::text::Span::from("Test {app_subtitle} v{version} Logo")
         ]));
         
         let localized = UIRenderer::localize_logo_text(&logo, &localization);
@@ -580,6 +582,8 @@ mod tests {
         let content = &localized.lines[0].spans[0].content;
         assert!(content.contains(&localization.get("app_subtitle")));
         assert!(!content.contains("{app_subtitle}"));
+        assert!(content.contains(env!("CARGO_PKG_VERSION")));
+        assert!(!content.contains("{version}"));
     }
 
     #[test]
