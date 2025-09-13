@@ -119,7 +119,7 @@ bump_version() {
   esac
 
   if [ "$DRY_RUN" = true ]; then
-    echo_dry "Would update Cargo.toml version from $current_version to $new_version"
+    echo_dry "Will update Cargo.toml version from $current_version to $new_version"
     # Create backup for dry run restoration
     cp Cargo.toml Cargo.toml.backup
   else
@@ -159,18 +159,19 @@ commit_and_tag() {
     echo_dry "Would commit changes with message: '$commit_msg'"
     echo_dry "Would create tag: v$version"
     echo_dry "Would push tag: v$version"
-    return
   fi
 
-  echo_info "Committing changes..."
-  git add Cargo.toml Cargo.lock
-  git commit -m "$commit_msg"
+  if [ "$DRY_RUN" = false ]; then
+    echo_info "Committing changes..."
+    git add Cargo.toml Cargo.lock
+    git commit -m "$commit_msg"
 
-  echo_info "Creating tag v$version..."
-  git tag "v$version"
+    echo_info "Creating tag v$version..."
+    git tag "v$version"
 
-  echo_info "Pushing tags..."
-  git push origin "v$version"
+    echo_info "Pushing tags..."
+    git push origin "v$version"
+  fi
 }
 
 # Function to build AUR package
@@ -190,12 +191,11 @@ build_aur_package() {
   fi
 
   if [ "$DRY_RUN" = true ]; then
-    echo_dry "Would update AUR repository at ../ptui-aur"
-    echo_dry "Would copy PKGBUILD from target/cargo-aur/"
-    echo_dry "Would regenerate .SRCINFO"
+    echo_dry "Dry, run, code would update AUR repository at ../ptui-aur"
+    echo_dry "Will copy PKGBUILD from target/cargo-aur/"
+    echo_dry "Will regenerate .SRCINFO"
     echo_dry "Would commit AUR changes with message: 'Update to v$version'"
     echo_dry "Would push AUR changes"
-    return
   fi
 
   echo_info "Updating AUR repository..."
@@ -213,24 +213,18 @@ build_aur_package() {
   makepkg --printsrcinfo >.SRCINFO
 
   echo_info "Modifying .SRCINFO to change ptui-bin to ptui..."
-  sed -i 's/ptui-bin/ptui/g' .SRCINFO
+  sed -i 's/pkgbase = ptui-bin/pkgbase = ptui/g' .SRCINFO
 
-  echo_info "Committing AUR changes..."
-  git add PKGBUILD .SRCINFO
-  git commit -m "Update to v$version"
+  if [ "$DRY_RUN" = false ]; then
+    echo_info "Committing AUR changes..."
+    git add PKGBUILD .SRCINFO
+    git commit -m "Update to v$version"
 
-  echo_info "Pushing AUR changes..."
-  git push
+    echo_info "Pushing AUR changes..."
+    git push
+  fi
 
   cd ../ptui
-}
-
-# Function to restore files after dry run
-restore_dry_run_changes() {
-  if [ -f "Cargo.toml.backup" ]; then
-    echo_dry "Restoring original Cargo.toml..."
-    mv Cargo.toml.backup Cargo.toml
-  fi
 }
 
 # Main execution
@@ -238,7 +232,7 @@ main() {
 
   if [ "$DRY_RUN" = true ]; then
     echo_dry "Running in DRY RUN mode - no commits or pushes will be made"
-    echo_dry "Files will be temporarily modified but restored at the end"
+    echo_dry "Files will be modified and left in-place for inspection"
     echo ""
   fi
 
@@ -263,11 +257,6 @@ main() {
     exit 1
   fi
 
-  # Set up trap to restore files on dry run exit
-  if [ "$DRY_RUN" = true ]; then
-    trap restore_dry_run_changes EXIT
-  fi
-
   # Bump version
   new_version=$(bump_version)
 
@@ -289,6 +278,7 @@ main() {
     echo_dry "- AUR package updated and pushed"
     echo_dry ""
     echo_dry "To perform the actual release, run: ./release.sh"
+    rm Cargo.toml.backup
   else
     echo_info "Release v$new_version completed successfully!"
     echo_info "Don't forget to push the main branch: git push origin main"
