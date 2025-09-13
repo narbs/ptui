@@ -72,19 +72,19 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 echo_info() {
-  echo -e "${GREEN}[INFO]${NC} $1"
+  echo -e "${GREEN}[INFO]${NC} $1" >&2
 }
 
 echo_warn() {
-  echo -e "${YELLOW}[WARN]${NC} $1"
+  echo -e "${YELLOW}[WARN]${NC} $1" >&2
 }
 
 echo_error() {
-  echo -e "${RED}[ERROR]${NC} $1"
+  echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 echo_dry() {
-  echo -e "${BLUE}[DRY-RUN]${NC} $1"
+  echo -e "${BLUE}[DRY-RUN]${NC} $1" >&2
 }
 
 # Function to bump version in Cargo.toml
