@@ -43,7 +43,7 @@ From AUR (Arch Linux):
 
 Usage
 -----
-    ptui [directory]
+    ptui
 
 If no directory is specified, ptui starts in the current directory.
 
