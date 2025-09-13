@@ -5,6 +5,19 @@ use std::path::Path;
 use std::time::SystemTime;
 use content_inspector::{inspect, ContentType};
 
+// Buffer size for reading file content for magic byte detection and content inspection
+// 50 bytes is sufficient for most common file types:
+// - JPEG: 3 bytes (0xFF, 0xD8, 0xFF)
+// - PNG: 8 bytes (0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
+// - GIF: 6 bytes ("GIF87a" or "GIF89a")
+// - WebP: 12 bytes ("RIFF" + 4 byte size + "WEBP")
+// - BMP: 2 bytes (0x42, 0x4D)
+// - TIFF: 4 bytes (0x49, 0x49, 0x2A, 0x00 or 0x4D, 0x4D, 0x00, 0x2A)
+// - SVG: may need up to ~45 bytes to detect "<svg" tag after XML declaration
+// - Text encoding detection also works well within this range
+// Using 50 bytes provides good balance between performance and detection accuracy
+const CONTENT_DETECTION_BUFFER_SIZE: usize = 50;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum SortMode {
     Name,
@@ -35,9 +48,9 @@ impl FileItem {
             return false;
         }
         
-        // Read only the first 512 bytes for content inspection - sufficient for magic bytes and basic detection
+        // Read only the first few bytes for content inspection - sufficient for magic bytes and basic detection
         if let Ok(mut file) = std::fs::File::open(&self.path) {
-            let mut buffer = [0u8; 512];
+            let mut buffer = [0u8; CONTENT_DETECTION_BUFFER_SIZE];
             if let Ok(bytes_read) = file.read(&mut buffer) {
                 let sample = &buffer[..bytes_read];
             match inspect(sample) {
@@ -103,9 +116,9 @@ impl FileItem {
             return false;
         }
         
-        // Read only the first 512 bytes for content inspection - sufficient for text encoding detection
+        // Read only the first few bytes for content inspection - sufficient for text encoding detection
         if let Ok(mut file) = std::fs::File::open(&self.path) {
-            let mut buffer = [0u8; 512];
+            let mut buffer = [0u8; CONTENT_DETECTION_BUFFER_SIZE];
             if let Ok(bytes_read) = file.read(&mut buffer) {
                 let sample = &buffer[..bytes_read];
                 match inspect(sample) {
