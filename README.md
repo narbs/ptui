@@ -34,6 +34,7 @@ Installation
 ------------
 
 From Source:
+    yay -S cargo
     cargo build --release
     cargo install --path .
 
