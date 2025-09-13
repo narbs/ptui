@@ -48,6 +48,7 @@ Usage
 If no directory is specified, ptui starts in the current directory.
 
 Controls:
+```
     Arrow Keys / j,k  - Navigate file list
     Enter             - Enter directory
     Backspace         - Go to parent directory
@@ -60,10 +61,12 @@ Controls:
     o                 - Open in system file browser (if available)
     q / Ctrl+C        - Quit
     ?                 - Help
+```
 
 Configuration
 -------------
-Configuration file is automatically created at ~/.config/ptui/ptui.json.
+On Linux, the configuration file is automatically created at ~/.config/ptui/ptui.json
+On a Mac the configuratino file is created here: "$HOME/Library/Application Support/ptui/ptui.json"
 
 Edits refresh in the app automatically.
 
