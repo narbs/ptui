@@ -6,6 +6,25 @@
 
 set -e # Exit on any error
 
+# Function to show help
+show_help() {
+  echo "Usage: $0 [--dry-run] [--patch|--minor|--major]"
+  echo ""
+  echo "Version bump options:"
+  echo "  --patch      Bump patch version (default: x.y.z -> x.y.z+1)"
+  echo "  --minor      Bump minor version (x.y.z -> x.y+1.0)"
+  echo "  --major      Bump major version (x.y.z -> x+1.0.0)"
+  echo ""
+  echo "Other options:"
+  echo "  --dry-run    Perform all steps except committing and pushing changes"
+  echo "  -h, --help   Show this help message"
+  echo ""
+  echo "Examples:"
+  echo "  $0                    # Bump patch version and release"
+  echo "  $0 --minor           # Bump minor version and release"
+  echo "  $0 --dry-run --major # Test major version bump without releasing"
+}
+
 # Show help if no arguments provided
 if [ $# -eq 0 ]; then
   show_help
@@ -212,25 +231,6 @@ restore_dry_run_changes() {
     echo_dry "Restoring original Cargo.toml..."
     mv Cargo.toml.backup Cargo.toml
   fi
-}
-
-# Function to show help
-show_help() {
-  echo "Usage: $0 [--dry-run] [--patch|--minor|--major]"
-  echo ""
-  echo "Version bump options:"
-  echo "  --patch      Bump patch version (default: x.y.z -> x.y.z+1)"
-  echo "  --minor      Bump minor version (x.y.z -> x.y+1.0)"
-  echo "  --major      Bump major version (x.y.z -> x+1.0.0)"
-  echo ""
-  echo "Other options:"
-  echo "  --dry-run    Perform all steps except committing and pushing changes"
-  echo "  -h, --help   Show this help message"
-  echo ""
-  echo "Examples:"
-  echo "  $0                    # Bump patch version and release"
-  echo "  $0 --minor           # Bump minor version and release"
-  echo "  $0 --dry-run --major # Test major version bump without releasing"
 }
 
 # Main execution
