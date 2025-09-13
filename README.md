@@ -45,7 +45,6 @@ Usage
 -----
     ptui
 
-If no directory is specified, ptui starts in the current directory.
 
 Controls:
 ```
