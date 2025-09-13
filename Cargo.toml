@@ -6,8 +6,10 @@ authors = ["Christian Clare"]
 description = "Picture TUI"
 license = "MIT"
 repository = "https://github.com/narbs/ptui"
+homepage = "https://github.com/narbs/ptui"
 categories = ["image","photo","TUI"]
 keywords = ["chafa","image","picture","photo","browser","TUI"]
+readme = "README.md"
 
 [package.metadata.aur]
 depends = ["chafa", "imagemagick"]
