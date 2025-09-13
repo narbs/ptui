@@ -65,7 +65,7 @@ Controls:
 Configuration
 -------------
 On Linux, the configuration file is automatically created at ~/.config/ptui/ptui.json
-On a Mac the configuratino file is created here: "$HOME/Library/Application Support/ptui/ptui.json"
+On a Mac the configuration file is created here: "$HOME/Library/Application Support/ptui/ptui.json"
 
 Edits refresh in the app automatically.
 
