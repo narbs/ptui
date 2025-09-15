@@ -85,7 +85,7 @@ impl PreviewManager {
         self.converter.convert_image(path, width, height)
     }
 
-    pub fn generate_preview(&mut self, file: &FileItem, width: u16, height: u16, localization: &Localization) -> Text<'static> {
+    pub fn generate_preview(&mut self, file: &FileItem, width: u16, height: u16, text_scroll_offset: usize, localization: &Localization) -> Text<'static> {
         if file.is_directory {
             self.debug_info = localization.get("directory_selected");
             return Text::from(localization.get("directory_selected"));
@@ -95,10 +95,10 @@ impl PreviewManager {
             self.generate_image_preview(&file.path, width, height, localization)
         } else if file.is_ascii_file() {
             self.debug_info = format!("{}{}", localization.get("ascii_file_prefix"), file.name);
-            self.generate_ascii_preview(&file.path)
+            self.generate_ascii_preview(&file.path, text_scroll_offset)
         } else if file.is_text_file() {
             self.debug_info = format!("{}{}", localization.get("text_file_prefix"), file.name);
-            self.generate_text_preview(&file.path)
+            self.generate_text_preview(&file.path, text_scroll_offset, height)
         } else {
             self.debug_info = localization.get("file_type_not_supported");
             Text::from(localization.get("not_supported_file_type"))
@@ -119,15 +119,27 @@ impl PreviewManager {
         result
     }
 
-    fn generate_ascii_preview(&self, path: &str) -> Text<'static> {
+    fn generate_ascii_preview(&self, path: &str, scroll_offset: usize) -> Text<'static> {
         match std::fs::read_to_string(path) {
             Ok(content) => {
                 // Parse ANSI codes in ASCII files and convert to Text
                 match content.as_bytes().into_text() {
-                    Ok(text) => text,
+                    Ok(mut text) => {
+                        // Apply scroll offset to ASCII files as well
+                        if scroll_offset > 0 && scroll_offset < text.lines.len() {
+                            text.lines.drain(0..scroll_offset);
+                        }
+                        text
+                    }
                     Err(_) => {
-                        // If ANSI parsing fails, display as plain text
-                        Text::from(content)
+                        // If ANSI parsing fails, display as plain text with scroll offset
+                        let lines: Vec<&str> = content.lines().collect();
+                        let scrolled_lines: Vec<String> = if scroll_offset < lines.len() {
+                            lines.into_iter().skip(scroll_offset).map(|s| s.to_string()).collect()
+                        } else {
+                            vec!["(End of file)".to_string()]
+                        };
+                        Text::from(scrolled_lines.join("\n"))
                     }
                 }
             }
@@ -135,27 +147,39 @@ impl PreviewManager {
         }
     }
 
-    fn generate_text_preview(&self, path: &str) -> Text<'static> {
+    fn generate_text_preview(&self, path: &str, scroll_offset: usize, visible_height: u16) -> Text<'static> {
         match std::fs::File::open(path) {
             Ok(file) => {
                 let reader = BufReader::new(file);
-                let mut lines: Vec<String> = Vec::new();
+                let mut all_lines: Vec<String> = Vec::new();
                 
+                // Read all lines first
                 for line in reader.lines() {
                     if let Ok(content) = line {
-                        lines.push(content);
+                        all_lines.push(content);
                         
-                        if lines.len() > 1000 {
-                            lines.push("... (file too large)".to_string());
+                        // Still limit total lines to prevent excessive memory usage
+                        if all_lines.len() > 10000 {
+                            all_lines.push("... (file too large for scrolling, showing first 10000 lines)".to_string());
                             break;
                         }
                     } else {
-                        lines.push("Error reading file".to_string());
+                        all_lines.push("Error reading file".to_string());
                         break;
                     }
                 }
                 
-                Text::from(lines.join("\n"))
+                // Apply scroll offset and visible height
+                let display_lines = if scroll_offset >= all_lines.len() {
+                    // If scrolled past the end, show "end of file" message
+                    vec!["(End of file)".to_string()]
+                } else {
+                    // Take lines starting from scroll_offset
+                    let end_line = (scroll_offset + visible_height as usize).min(all_lines.len());
+                    all_lines[scroll_offset..end_line].to_vec()
+                };
+                
+                Text::from(display_lines.join("\n"))
             }
             Err(_) => Text::from("Error: Could not open file"),
         }
@@ -320,7 +344,7 @@ mod tests {
         let localization = Localization::new("en").unwrap();
         let dir_item = create_test_directory_item("test_dir");
         
-        let preview = manager.generate_preview(&dir_item, 80, 24, &localization);
+        let preview = manager.generate_preview(&dir_item, 80, 24, 0, &localization);
         
         assert_eq!(manager.debug_info, localization.get("directory_selected"));
         assert!(!preview.lines.is_empty());
@@ -342,7 +366,7 @@ mod tests {
             std::time::UNIX_EPOCH,
         );
         
-        let preview = manager.generate_preview(&file_item, 80, 24, &localization);
+        let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         
         assert!(manager.debug_info.contains("test.txt"));
         assert!(!preview.lines.is_empty());
@@ -365,7 +389,7 @@ mod tests {
             std::time::UNIX_EPOCH,
         );
         
-        let preview = manager.generate_preview(&file_item, 80, 24, &localization);
+        let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         
         assert!(manager.debug_info.contains("test.ascii"));
         assert!(!preview.lines.is_empty());
@@ -378,7 +402,7 @@ mod tests {
         let localization = Localization::new("en").unwrap();
         let unsupported_item = create_test_file_item("test.xyz", false);
         
-        let preview = manager.generate_preview(&unsupported_item, 80, 24, &localization);
+        let preview = manager.generate_preview(&unsupported_item, 80, 24, 0, &localization);
         
         assert_eq!(manager.debug_info, localization.get("file_type_not_supported"));
         assert!(!preview.lines.is_empty());
@@ -400,10 +424,10 @@ mod tests {
             std::time::UNIX_EPOCH,
         );
         
-        let _ = manager.generate_preview(&file_item, 80, 24, &localization);
+        let _ = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         let cache_size_after_first = manager.cache.len();
         
-        let _ = manager.generate_preview(&file_item, 80, 24, &localization);
+        let _ = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         let cache_size_after_second = manager.cache.len();
         
         assert_eq!(cache_size_after_first, cache_size_after_second);
@@ -451,9 +475,51 @@ mod tests {
     }
 
     #[test]
+    fn test_preview_manager_text_file_scrolling() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        let test_content = (0..50).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
+        let file_path = temp_fs.create_file("scrollable.txt", &test_content).unwrap();
+        
+        let config = create_test_config();
+        let mut manager = PreviewManager::new(config);
+        let localization = Localization::new("en").unwrap();
+        
+        let file_item = FileItem::new(
+            "scrollable.txt".to_string(),
+            file_path,
+            false,
+            std::time::UNIX_EPOCH,
+        );
+        
+        // Test scrolling from the beginning (scroll_offset = 0)
+        let preview1 = manager.generate_preview(&file_item, 80, 10, 0, &localization);
+        let content1 = preview1.lines.iter()
+            .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        // Test scrolling with offset
+        let preview2 = manager.generate_preview(&file_item, 80, 10, 5, &localization);
+        let content2 = preview2.lines.iter()
+            .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+            .collect::<Vec<_>>()
+            .join("\n");
+        
+        // The first preview should start with "Line 0"
+        assert!(content1.contains("Line 0"));
+        // With height=10, we should only see lines 0-9, not line 10 or higher
+        assert!(!content1.contains("Line 10"));
+        
+        // The second preview should start with "Line 5" due to scroll offset
+        assert!(content2.contains("Line 5"));
+        assert!(!content2.contains("Line 0"));
+    }
+
+    #[test]
     fn test_preview_manager_text_file_line_limit() {
         let temp_fs = TestFileSystem::new().unwrap();
-        let large_content = (0..1200).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
+        // Create a file with more than 10000 lines to trigger the limit
+        let large_content = (0..10002).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
         let file_path = temp_fs.create_file("large.txt", &large_content).unwrap();
         
         let config = create_test_config();
@@ -467,13 +533,15 @@ mod tests {
             std::time::UNIX_EPOCH,
         );
         
-        let preview = manager.generate_preview(&file_item, 80, 24, &localization);
+        // Test with a large height parameter to see if limit is reached
+        let preview = manager.generate_preview(&file_item, 80, 15000, 0, &localization);
         let content = preview.lines.iter()
             .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
             .collect::<Vec<_>>()
             .join("\n");
         
-        assert!(content.contains("file too large"));
+        // Should show the limit message since we have more than 10000 lines
+        assert!(content.contains("file too large for scrolling"));
     }
 
     #[test]
@@ -571,7 +639,7 @@ mod tests {
             std::time::UNIX_EPOCH,
         );
         
-        let preview = manager.generate_preview(&file_item, 80, 24, &localization);
+        let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         assert!(!preview.lines.is_empty());
     }
 
@@ -591,7 +659,7 @@ mod tests {
             std::time::UNIX_EPOCH,
         );
         
-        let preview = manager.generate_preview(&file_item, 80, 24, &localization);
+        let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         assert!(!preview.lines.is_empty());
     }
 }

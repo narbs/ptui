@@ -22,7 +22,7 @@ fn test_file_browser_and_preview_integration() {
     let localization = localization::Localization::new("en").unwrap();
     
     if let Some(file) = file_browser.get_selected_file() {
-        let preview = preview_manager.generate_preview(file, 80, 24, &localization);
+        let preview = preview_manager.generate_preview(file, 80, 24, 0, &localization);
         assert!(!preview.lines.is_empty());
     }
 }
@@ -150,14 +150,14 @@ fn test_preview_caching_behavior() {
         std::time::UNIX_EPOCH,
     );
     
-    let preview1 = preview_manager.generate_preview(&file_item, 80, 24, &localization);
-    let preview2 = preview_manager.generate_preview(&file_item, 80, 24, &localization);
+    let preview1 = preview_manager.generate_preview(&file_item, 80, 24, 0, &localization);
+    let preview2 = preview_manager.generate_preview(&file_item, 80, 24, 0, &localization);
     
     assert!(!preview1.lines.is_empty());
     assert!(!preview2.lines.is_empty());
     
     preview_manager.clear_cache();
-    let preview3 = preview_manager.generate_preview(&file_item, 80, 24, &localization);
+    let preview3 = preview_manager.generate_preview(&file_item, 80, 24, 0, &localization);
     assert!(!preview3.lines.is_empty());
 }
 

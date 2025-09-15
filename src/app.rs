@@ -39,6 +39,8 @@ pub struct ChafaTui {
     show_help_on_startup: bool,
     show_help_toggle: bool,
     ascii_logo: Option<Text<'static>>,
+    // Text file scrolling state
+    text_scroll_offset: usize,
     // Slideshow state
     is_slideshow_mode: bool,
     slideshow_start_index: usize,
@@ -84,6 +86,8 @@ impl ChafaTui {
             show_help_on_startup: true,
             show_help_toggle: false,
             ascii_logo,
+            // Text file scrolling state
+            text_scroll_offset: 0,
             // Slideshow state
             is_slideshow_mode: false,
             slideshow_start_index: 0,
@@ -146,24 +150,28 @@ impl ChafaTui {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.move_down();
+                self.reset_text_scroll();
                 self.update_preview();
             }
             KeyCode::Up | KeyCode::Char('k') => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.move_up();
+                self.reset_text_scroll();
                 self.update_preview();
             }
             KeyCode::PageDown => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.page_down();
+                self.reset_text_scroll();
                 self.update_preview();
             }
             KeyCode::PageUp => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.page_up();
+                self.reset_text_scroll();
                 self.update_preview();
             }
             KeyCode::Char('f') if key.modifiers.contains(KeyModifiers::CONTROL) => {
@@ -178,16 +186,25 @@ impl ChafaTui {
                 self.file_browser.page_up();
                 self.update_preview();
             }
+            KeyCode::Char('u') => {
+                self.show_help_on_startup = false;
+                self.show_help_toggle = false;
+                if self.is_text_file_selected() {
+                    self.scroll_text_up();
+                }
+            }
             KeyCode::Char('f') => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.jump_forward();
+                self.reset_text_scroll();
                 self.update_preview();
             }
             KeyCode::Char('b') => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.jump_backward();
+                self.reset_text_scroll();
                 self.update_preview();
             }
             KeyCode::Char('d') => {
@@ -256,7 +273,10 @@ impl ChafaTui {
             KeyCode::Char(' ') => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
-                if self.is_slideshow_mode {
+                // Priority: text scrolling first, then slideshow
+                if self.is_text_file_selected() {
+                    self.scroll_text_down();
+                } else if self.is_slideshow_mode {
                     self.exit_slideshow_mode();
                 } else {
                     self.enter_slideshow_mode();
@@ -293,12 +313,14 @@ impl ChafaTui {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.move_to_start();
+                self.reset_text_scroll();
                 self.update_preview();
             }
             KeyCode::End => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.move_to_end();
+                self.reset_text_scroll();
                 self.update_preview();
             }
             _ => {
@@ -357,6 +379,7 @@ impl ChafaTui {
                 file,
                 self.ui_layout.preview_width,
                 self.ui_layout.preview_height,
+                self.text_scroll_offset,
                 &self.localization,
             ));
             // Only treat actual image files as images for UI rendering (centered alignment)
@@ -735,6 +758,7 @@ impl ChafaTui {
                 file,
                 self.terminal_width.saturating_sub(4),
                 self.terminal_height.saturating_sub(4),
+                0, // No text scrolling in slideshow mode
                 &self.localization,
             ));
             self.is_preview_image = true;
@@ -811,6 +835,30 @@ impl ChafaTui {
             && let Some(ref file_name) = self.delete_target_file {
                 UIRenderer::render_delete_confirmation_dialog(f, size, file_name, &self.localization);
             }
+    }
+
+    fn is_text_file_selected(&self) -> bool {
+        if let Some(file) = self.file_browser.get_selected_file() {
+            file.is_text_file() && !file.is_directory
+        } else {
+            false
+        }
+    }
+
+    fn scroll_text_up(&mut self) {
+        let scroll_amount = (self.ui_layout.preview_height as usize / 2).max(1);
+        self.text_scroll_offset = self.text_scroll_offset.saturating_sub(scroll_amount);
+        self.update_preview();
+    }
+
+    fn scroll_text_down(&mut self) {
+        let scroll_amount = (self.ui_layout.preview_height as usize / 2).max(1);
+        self.text_scroll_offset += scroll_amount;
+        self.update_preview();
+    }
+
+    fn reset_text_scroll(&mut self) {
+        self.text_scroll_offset = 0;
     }
 
 }

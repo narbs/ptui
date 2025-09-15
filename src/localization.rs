@@ -64,7 +64,7 @@ impl Localization {
 
     pub fn get_help_text(&self) -> String {
         format!(
-            "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             self.get("select_image_to_preview"),
             self.get("keys_navigation"),
             self.get("keys_page_navigation"),
@@ -79,6 +79,7 @@ impl Localization {
             self.get("keys_delete_file"),
             self.get("keys_open_in_browser"),
             self.get("keys_slideshow"),
+            self.get("keys_text_scroll"),
             self.get("keys_help_toggle"),
             self.get("keys_quit")
         )
@@ -129,6 +130,11 @@ mod tests {
         assert!(help_text.contains(&localization.get("keys_navigation")));
         assert!(help_text.contains(&localization.get("keys_quit")));
         assert!(help_text.contains(&localization.get("keys_help_toggle")));
+        assert!(help_text.contains(&localization.get("keys_text_scroll")));
+        
+        // Specifically test that the scrolling keys are mentioned
+        assert!(help_text.contains("u: Scroll text up"));
+        assert!(help_text.contains("Space: Scroll text down"));
     }
 
     #[test]
