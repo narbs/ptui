@@ -13,7 +13,7 @@ readme = "README.md"
 
 [package.metadata.aur]
 depends = ["chafa", "imagemagick"]
-files = ["README.md", "NEWS.md", "CHANGELOG.md"]
+files = [["README.md", "/usr/share/doc/ptui/README.md"], ["NEWS.md", "/usr/share/doc/ptui/NEWS.md"], ["CHANGELOG.md", "/usr/share/doc/ptui/CHANGELOG.md"]]
 
 [[bin]]
 name = "ptui"
