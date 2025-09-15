@@ -1,6 +1,11 @@
 PTUI - Picture TUI - CHANGELOG
 ==============================
 
+Sep 14, 2025
+------------
+
+PTUI 1.0.4 released. Implement text scrolling using space bar to go down and u to go up
+
 Sep 13, 2025
 ------------
 
