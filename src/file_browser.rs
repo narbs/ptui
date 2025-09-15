@@ -6,17 +6,18 @@ use std::time::SystemTime;
 use content_inspector::{inspect, ContentType};
 
 // Buffer size for reading file content for magic byte detection and content inspection
-// 50 bytes is sufficient for most common file types:
+// Most image formats need only a few bytes for magic byte detection:
 // - JPEG: 3 bytes (0xFF, 0xD8, 0xFF)
 // - PNG: 8 bytes (0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A)
 // - GIF: 6 bytes ("GIF87a" or "GIF89a")
 // - WebP: 12 bytes ("RIFF" + 4 byte size + "WEBP")
 // - BMP: 2 bytes (0x42, 0x4D)
 // - TIFF: 4 bytes (0x49, 0x49, 0x2A, 0x00 or 0x4D, 0x4D, 0x00, 0x2A)
-// - SVG: may need up to ~45 bytes to detect "<svg" tag after XML declaration
+// - SVG: may need more bytes due to XML declarations, comments, and DOCTYPE declarations
+//   before the <svg tag appears. Using 512 bytes to handle SVG files reliably.
 // - Text encoding detection also works well within this range
-// Using 50 bytes provides good balance between performance and detection accuracy
-const CONTENT_DETECTION_BUFFER_SIZE: usize = 50;
+// Using 512 bytes provides better SVG detection while maintaining good performance
+const CONTENT_DETECTION_BUFFER_SIZE: usize = 512;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SortMode {
@@ -82,7 +83,10 @@ impl FileItem {
                 ContentType::UTF_8 => {
                     // Check if it's SVG (XML-based image format)
                     let content = String::from_utf8_lossy(sample);
-                    content.contains("<svg") || content.contains("</svg>")
+                    // Look for various SVG indicators in the content
+                    content.contains("<svg") || content.contains("</svg>") 
+                        || content.contains("<SVG") || content.contains("</SVG>")
+                        || (content.contains("<?xml") && content.to_lowercase().contains("svg"))
                 },
                 _ => false
             }
