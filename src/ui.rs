@@ -170,6 +170,9 @@ impl UIRenderer {
         localization: &Localization,
         ascii_logo: Option<&Text<'static>>,
     ) {
+        // Clear the preview area first to prevent artifacts when switching between text files
+        use ratatui::widgets::Clear;
+        f.render_widget(Clear, area);
         let content = match preview_content {
             Some(content) => content.clone(),
             None => {
