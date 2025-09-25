@@ -33,15 +33,27 @@ Requirements
 Installation
 ------------
 
-From Source:
+From Source on Arch Linux:
 
+    git clone https://github.com/narbs/ptui.git; cd ptui
     yay -S cargo
+    cargo build --release
+    cargo install --path .
+
+From Source on Mac:
+
+    git clone https://github.com/narbs/ptui.git; cd ptui
+    brew install rust
     cargo build --release
     cargo install --path .
 
 From AUR (Arch Linux):
 
     yay -S ptui-bin
+
+From Homebrew (Linux or Mac):
+
+    brew install narbs/homebrew-tap/narbs-ptui
 
 Usage
 -----
