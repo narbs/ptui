@@ -4,7 +4,7 @@ PTUI - Picture TUI - CHANGELOG
 Sep 24, 2025
 ------------
 
-PTUI 1.0.7 released. Add --version command line argument for homebrew compatibility
+PTUI 1.0.7, 1.0.8 released. Add --version command line argument for homebrew compatibility
 
 Sep 23, 2025
 ------------
