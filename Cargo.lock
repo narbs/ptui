@@ -1064,7 +1064,7 @@ dependencies = [
 
 [[package]]
 name = "ptui"
-version = "1.0.6"
+version = "1.0.7"
 dependencies = [
  "ansi-to-tui",
  "cc",
