@@ -11,7 +11,7 @@ mod ui;
 mod test_utils;
 
 use app::ChafaTui;
-use clap::{Arg, Command};
+use clap::Command;
 use config::PTuiConfig;
 use crossterm::{
     event::{self, Event},
@@ -24,23 +24,10 @@ use std::time::{Duration, Instant};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Parse command line arguments
-    let matches = Command::new("ptui")
+    let _matches = Command::new("ptui")
         .version(env!("CARGO_PKG_VERSION"))
         .about("Picture TUI - Terminal-based image viewer")
-        .arg(
-            Arg::new("version")
-                .long("version")
-                .short('V')
-                .help("Print version information")
-                .action(clap::ArgAction::SetTrue)
-        )
         .get_matches();
-
-    // Handle version flag
-    if matches.get_flag("version") {
-        println!("ptui {}", env!("CARGO_PKG_VERSION"));
-        return Ok(());
-    }
 
     // Create app
     let mut app = ChafaTui::new()?;
