@@ -36,6 +36,7 @@ unic-langid = "0.9.6"
 notify = "8.2.0"
 terani = "0.1.0"
 content_inspector = "0.2.4"
+clap = { version = "4.0", features = ["derive"] }
 
 [build-dependencies]
 cc = "1.2.37"
