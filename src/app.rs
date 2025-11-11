@@ -16,12 +16,15 @@ const DIVIDER_PERCENT_INCREMENT: u16 = 2;
 
 const EMBEDDED_LOGO: &str = r#"
 
- ██▓███  ▄▄▄█████▓ █    ██  ██▓
-▓██░  ██▒▓  ██▒ ▓▒ ██  ▓██▒▓██▒
-▓██░ ██▓▒▒ ▓██░ ▒░▓██  ▒██░▒██▒
-▒██▄█▓▒ ▒░ ▓██▓   ▓▓█  ░██░░██░
-▒██▒       ▒██▒   ▒▒█████▓ ░██░
- ▓         ▒ ░░   ░▒▓▒ ▒ ▒ ░▓  
+     OooOOo.  oOoOOoOOo O       o ooOoOOo
+     O     `O     o     o       O    O
+     o      O     o     O       o    o
+     O     .o     O     o       o    O
+     oOooOO'      o     o       O    o
+     o            O     O       O    O
+     O            O     `o     Oo    O
+     o'           o'     `OoooO'O ooOOoOo
+
 
 {app_subtitle}
 v{version}"#;
