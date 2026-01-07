@@ -1,6 +1,6 @@
 image_preview = 图片预览
 app_subtitle = 图片终端用户界面
-select_image_to_preview = 选择图像文件进行预览
+select_image_to_preview = 终端图像查看器。键盘快捷键：
 keys_navigation = ↑/k/←: 向上导航, ↓/j/→: 向下导航
 keys_page_navigation = Page Up/Page Down: 按页跳转
 keys_jump_navigation = f/b: 按10个文件前进/后退

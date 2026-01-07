@@ -1,6 +1,6 @@
 image_preview = Image Preview
 app_subtitle = Picture Terminal User Interface
-select_image_to_preview = Select an image file to preview
+select_image_to_preview = A terminal image viewer. Keyboard shortcuts:
 keys_navigation = ↑/k/←: Navigate up, ↓/j/→: Navigate down
 keys_page_navigation = Page Up/Page Down: Jump by page
 keys_jump_navigation = f/b: Jump forward/backward by 10 files

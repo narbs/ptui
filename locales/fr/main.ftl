@@ -1,6 +1,6 @@
 image_preview = Aperçu de l'Image
 app_subtitle = Interface Utilisateur Terminal d'Images
-select_image_to_preview = Sélectionnez un fichier image pour l'aperçu
+select_image_to_preview = Un visualiseur d'images en terminal. Raccourcis clavier :
 keys_navigation = ↑/k/← : Naviguer vers le haut, ↓/j/→ : Naviguer vers le bas
 keys_page_navigation = Page Préc/Page Suiv : Saut par page
 keys_jump_navigation = f/b : Saut de 10 fichiers avant/arrière

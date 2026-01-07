@@ -1,6 +1,6 @@
 image_preview = 画像プレビュー
 app_subtitle = ピクチャーターミナルユーザーインターフェース
-select_image_to_preview = プレビューする画像ファイルを選択
+select_image_to_preview = ターミナル画像ビューア。キーボードショートカット：
 keys_navigation = ↑/k/←: 上に移動, ↓/j/→: 下に移動
 keys_page_navigation = Page Up/Page Down: ページ単位でジャンプ
 keys_jump_navigation = f/b: 10ファイル単位で前後移動

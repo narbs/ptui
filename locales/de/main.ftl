@@ -1,6 +1,6 @@
 image_preview = Bildvorschau
 app_subtitle = Bild-Terminal-Benutzeroberfläche
-select_image_to_preview = Wählen Sie eine Bilddatei zum Vorschau anzeigen
+select_image_to_preview = Ein Terminal-Bildbetrachter. Tastenkombinationen:
 keys_navigation = ↑/k/←: Nach oben navigieren, ↓/j/→: Nach unten navigieren
 keys_page_navigation = Bild auf/Bild ab: Seitenweise springen
 keys_jump_navigation = f/b: Um 10 Dateien vor/zurück springen
