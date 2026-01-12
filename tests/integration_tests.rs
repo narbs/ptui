@@ -7,8 +7,7 @@ fn test_full_application_workflow() {
     
     let config_result = config::PTuiConfig::load();
     
-    if let Ok(_config) = config_result {
-    }
+    if let Ok(_config) = config_result {}
 }
 
 #[test]
@@ -186,11 +185,23 @@ fn test_multilingual_support() {
         let localization = localization::Localization::new(locale).unwrap();
         let help_text = localization.get_help_text();
         
-        assert!(!help_text.is_empty(), "Locale {} should have help text", locale);
+        assert!(
+            !help_text.is_empty(),
+            "Locale {} should have help text",
+            locale
+        );
         
         let quit_message = localization.get("keys_quit");
-        assert!(!quit_message.is_empty(), "Locale {} should have quit message", locale);
-        assert_ne!(quit_message, "keys_quit", "Locale {} should translate keys", locale);
+        assert!(
+            !quit_message.is_empty(),
+            "Locale {} should have quit message",
+            locale
+        );
+        assert_ne!(
+            quit_message, "keys_quit",
+            "Locale {} should translate keys",
+            locale
+        );
     }
 }
 
@@ -199,12 +210,21 @@ fn create_test_environment() -> Result<TempDir, Box<dyn std::error::Error>> {
     
     std::fs::write(temp_dir.path().join("image1.jpg"), create_minimal_jpeg())?;
     std::fs::write(temp_dir.path().join("image2.png"), b"fake png content")?;
-    std::fs::write(temp_dir.path().join("document.txt"), "Sample text content\nLine 2\nLine 3")?;
+    std::fs::write(
+        temp_dir.path().join("document.txt"),
+        "Sample text content\nLine 2\nLine 3",
+    )?;
     std::fs::write(temp_dir.path().join("config.json"), r#"{"key": "value"}"#)?;
-    std::fs::write(temp_dir.path().join("art.ascii"), "\x1b[31mRed\x1b[0m ASCII art")?;
+    std::fs::write(
+        temp_dir.path().join("art.ascii"),
+        "\x1b[31mRed\x1b[0m ASCII art",
+    )?;
     
     std::fs::create_dir(temp_dir.path().join("subfolder"))?;
-    std::fs::write(temp_dir.path().join("subfolder/nested.txt"), "Nested content")?;
+    std::fs::write(
+        temp_dir.path().join("subfolder/nested.txt"),
+        "Nested content",
+    )?;
     
     Ok(temp_dir)
 }

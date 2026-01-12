@@ -1,9 +1,9 @@
+use content_inspector::{ContentType, inspect};
 use std::error::Error;
 use std::fs;
 use std::io::Read;
 use std::path::Path;
 use std::time::SystemTime;
-use content_inspector::{inspect, ContentType};
 
 // Buffer size for reading file content for magic byte detection and content inspection
 // Most image formats need only a few bytes for magic byte detection:
@@ -59,36 +59,49 @@ impl FileItem {
                     // For binary files, check if it's a known image format by magic bytes
                     if sample.len() >= 4 {
                         // Check for common image magic bytes
-                        if sample.starts_with(&[0xFF, 0xD8, 0xFF]) { // JPEG
+                            if sample.starts_with(&[0xFF, 0xD8, 0xFF]) {
+                                // JPEG
                             return true;
                         }
-                        if sample.starts_with(&[0x89, 0x50, 0x4E, 0x47]) { // PNG
+                            if sample.starts_with(&[0x89, 0x50, 0x4E, 0x47]) {
+                                // PNG
                             return true;
                         }
-                        if sample.starts_with(b"GIF8") { // GIF
+                            if sample.starts_with(b"GIF8") {
+                                // GIF
                             return true;
                         }
-                        if sample.starts_with(b"RIFF") && sample.len() >= 12 && &sample[8..12] == b"WEBP" { // WebP
+                            if sample.starts_with(b"RIFF")
+                                && sample.len() >= 12
+                                && &sample[8..12] == b"WEBP"
+                            {
+                                // WebP
                             return true;
                         }
-                        if sample.starts_with(&[0x42, 0x4D]) { // BMP
+                            if sample.starts_with(&[0x42, 0x4D]) {
+                                // BMP
                             return true;
                         }
-                        if sample.starts_with(&[0x49, 0x49, 0x2A, 0x00]) || sample.starts_with(&[0x4D, 0x4D, 0x00, 0x2A]) { // TIFF
+                            if sample.starts_with(&[0x49, 0x49, 0x2A, 0x00])
+                                || sample.starts_with(&[0x4D, 0x4D, 0x00, 0x2A])
+                            {
+                                // TIFF
                             return true;
                         }
                     }
                     false
-                },
+                    }
                 ContentType::UTF_8 => {
                     // Check if it's SVG (XML-based image format)
                     let content = String::from_utf8_lossy(sample);
                     // Look for various SVG indicators in the content
-                    content.contains("<svg") || content.contains("</svg>") 
-                        || content.contains("<SVG") || content.contains("</SVG>")
+                        content.contains("<svg")
+                            || content.contains("</svg>")
+                            || content.contains("<SVG")
+                            || content.contains("</SVG>")
                         || (content.contains("<?xml") && content.to_lowercase().contains("svg"))
-                },
-                _ => false
+                    }
+                    _ => false,
             }
             } else {
                 false
@@ -115,8 +128,9 @@ impl FileItem {
             return false;
         }
         
-        // Skip if it's already identified as an image or ascii file
-        if self.is_image() || self.is_ascii_file() {
+        // Skip ASCII files by extension check only (cheap operation)
+        // NOTE: Caller must check is_image() before calling this method to avoid redundant file reads
+        if self.is_ascii_file() {
             return false;
         }
         
@@ -129,7 +143,7 @@ impl FileItem {
                     ContentType::UTF_8 | ContentType::UTF_8_BOM => true,
                     ContentType::UTF_16LE | ContentType::UTF_16BE => true,
                     ContentType::UTF_32LE | ContentType::UTF_32BE => true,
-                    _ => false
+                    _ => false,
                 }
             } else {
                 false
@@ -189,12 +203,16 @@ impl FileBrowser {
             if !is_directory
                 && let Ok(metadata) = fs::symlink_metadata(&path)
                     && metadata.file_type().is_symlink()
-                        && let Ok(target_metadata) = fs::metadata(&path) {
+                && let Ok(target_metadata) = fs::metadata(&path)
+            {
                             is_directory = target_metadata.is_dir();
                         }
             
             // Get modification time
-            let modified = entry.metadata()?.modified().unwrap_or(SystemTime::UNIX_EPOCH);
+            let modified = entry
+                .metadata()?
+                .modified()
+                .unwrap_or(SystemTime::UNIX_EPOCH);
             
             self.files.push(FileItem::new(
                 entry.file_name().to_string_lossy().into_owned(),
@@ -235,7 +253,9 @@ impl FileBrowser {
             self.selected_index += 1;
             
             if self.selected_index >= self.scroll_offset + self.max_visible_files {
-                self.scroll_offset = self.selected_index.saturating_sub(self.max_visible_files - 1);
+                self.scroll_offset = self
+                    .selected_index
+                    .saturating_sub(self.max_visible_files - 1);
             }
         }
     }
@@ -255,7 +275,11 @@ impl FileBrowser {
             return;
         }
 
-        let page_size = if self.max_visible_files > 0 { self.max_visible_files } else { 10 };
+        let page_size = if self.max_visible_files > 0 {
+            self.max_visible_files
+        } else {
+            10
+        };
         let new_index = (self.selected_index + page_size).min(self.files.len() - 1);
         
         // If we're already near the end, jump to the last item
@@ -274,7 +298,11 @@ impl FileBrowser {
             return;
         }
 
-        let page_size = if self.max_visible_files > 0 { self.max_visible_files } else { 10 };
+        let page_size = if self.max_visible_files > 0 {
+            self.max_visible_files
+        } else {
+            10
+        };
         
         // If we're already near the top, jump to the first item
         if self.selected_index <= page_size {
@@ -293,7 +321,9 @@ impl FileBrowser {
             self.scroll_offset = self.selected_index;
         } else if self.selected_index >= self.scroll_offset + self.max_visible_files {
             // Selection is below visible area, scroll down
-            self.scroll_offset = self.selected_index.saturating_sub(self.max_visible_files - 1);
+            self.scroll_offset = self
+                .selected_index
+                .saturating_sub(self.max_visible_files - 1);
         }
     }
 
@@ -363,11 +393,11 @@ impl FileBrowser {
             SortMode::DateNewestFirst => {
                 self.sort_mode = SortMode::DateOldestFirst;
                 "date_sort_oldest_first"
-            },
+            }
             SortMode::DateOldestFirst => {
                 self.sort_mode = SortMode::DateNewestFirst;
                 "date_sort_newest_first"
-            },
+            }
             SortMode::Name => {
                 self.sort_mode = SortMode::DateNewestFirst; // Default to newest first when switching from name
                 "date_sort_newest_first"
@@ -393,7 +423,8 @@ impl FileBrowser {
 
     pub fn enter_directory(&mut self) -> Result<bool, Box<dyn Error>> {
         if let Some(file) = self.get_selected_file()
-            && file.is_directory {
+            && file.is_directory
+        {
                 self.current_dir = file.path.clone();
                 self.selected_index = 0;
                 self.scroll_offset = 0;
@@ -473,7 +504,7 @@ impl FileBrowser {
 mod tests {
     use super::*;
     use crate::test_utils::helpers::*;
-    use std::time::{UNIX_EPOCH, Duration};
+    use std::time::{Duration, UNIX_EPOCH};
 
     #[test]
     fn test_file_item_creation() {
@@ -536,15 +567,25 @@ mod tests {
         for (filename, content) in &text_files {
             let path = temp_fs.create_file(filename, content).unwrap();
             let item = FileItem::new(filename.to_string(), path, false, UNIX_EPOCH);
-            assert!(item.is_text_file(), "Should detect {} as text file", filename);
+            assert!(
+                item.is_text_file(),
+                "Should detect {} as text file",
+                filename
+            );
         }
         
         let dir_item = create_test_file_item("test.txt", true);
-        assert!(!dir_item.is_text_file(), "Directory should not be text file");
+        assert!(
+            !dir_item.is_text_file(),
+            "Directory should not be text file"
+        );
         
         let image_path = temp_fs.create_test_image("test.jpg").unwrap();
         let image_item = FileItem::new("test.jpg".to_string(), image_path, false, UNIX_EPOCH);
-        assert!(!image_item.is_text_file(), "Image file should not be text file");
+        assert!(
+            !image_item.is_text_file(),
+            "Image file should not be text file"
+        );
     }
 
     #[test]
@@ -574,7 +615,9 @@ mod tests {
         assert!(text_item.can_preview());
         
         // Test ascii file
-        let ascii_path = temp_fs.create_file("art.ascii", "ASCII art content").unwrap();
+        let ascii_path = temp_fs
+            .create_file("art.ascii", "ASCII art content")
+            .unwrap();
         let ascii_item = FileItem::new("art.ascii".to_string(), ascii_path, false, UNIX_EPOCH);
         assert!(ascii_item.can_preview());
         
@@ -583,8 +626,11 @@ mod tests {
         
         // Test unknown binary file
         let unknown_content = b"\x00\x01\x02\x03\x04\x05"; // Binary content with no known signature
-        let unknown_path = temp_fs.create_binary_file("unknown.xyz", unknown_content).unwrap();
-        let unknown_item = FileItem::new("unknown.xyz".to_string(), unknown_path, false, UNIX_EPOCH);
+        let unknown_path = temp_fs
+            .create_binary_file("unknown.xyz", unknown_content)
+            .unwrap();
+        let unknown_item =
+            FileItem::new("unknown.xyz".to_string(), unknown_path, false, UNIX_EPOCH);
         assert!(!unknown_item.can_preview());
     }
 
@@ -658,7 +704,9 @@ mod tests {
     fn test_file_browser_page_navigation() {
         let temp_fs = TestFileSystem::new().unwrap();
         for i in 0..50 {
-            temp_fs.create_file(&format!("file{:02}.txt", i), "content").unwrap();
+            temp_fs
+                .create_file(&format!("file{:02}.txt", i), "content")
+                .unwrap();
         }
         
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
@@ -683,7 +731,9 @@ mod tests {
     fn test_file_browser_jump_navigation() {
         let temp_fs = TestFileSystem::new().unwrap();
         for i in 0..30 {
-            temp_fs.create_file(&format!("file{:02}.txt", i), "content").unwrap();
+            temp_fs
+                .create_file(&format!("file{:02}.txt", i), "content")
+                .unwrap();
         }
         
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
@@ -782,7 +832,11 @@ mod tests {
         
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
         
-        let subdir_index = browser.files.iter().position(|f| f.name == "subdir").unwrap();
+        let subdir_index = browser
+            .files
+            .iter()
+            .position(|f| f.name == "subdir")
+            .unwrap();
         browser.set_selected_index(subdir_index);
         
         let entered = browser.enter_directory().unwrap();
@@ -801,7 +855,9 @@ mod tests {
     fn test_file_browser_get_display_files() {
         let temp_fs = TestFileSystem::new().unwrap();
         for i in 0..15 {
-            temp_fs.create_file(&format!("file{:02}.txt", i), "content").unwrap();
+            temp_fs
+                .create_file(&format!("file{:02}.txt", i), "content")
+                .unwrap();
         }
         
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
@@ -818,7 +874,9 @@ mod tests {
     fn test_file_browser_center_on_selection() {
         let temp_fs = TestFileSystem::new().unwrap();
         for i in 0..20 {
-            temp_fs.create_file(&format!("file{:02}.txt", i), "content").unwrap();
+            temp_fs
+                .create_file(&format!("file{:02}.txt", i), "content")
+                .unwrap();
         }
         
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
@@ -837,7 +895,8 @@ mod tests {
         let temp_fs = TestFileSystem::new().unwrap();
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
         
-        browser.current_dir = "/very/long/path/that/exceeds/thirty/characters/for/testing/truncation".to_string();
+        browser.current_dir =
+            "/very/long/path/that/exceeds/thirty/characters/for/testing/truncation".to_string();
         let display = browser.get_current_dir_display();
         
         assert!(display.starts_with("..."));
@@ -869,7 +928,8 @@ mod tests {
         let browser_result = FileBrowser::new_with_dir(temp_fs.get_path());
         
         if let Ok(browser) = browser_result
-            && let Some(selected) = browser.get_selected_file() {
+            && let Some(selected) = browser.get_selected_file()
+        {
                 assert!(!selected.name.is_empty());
             }
     }
@@ -889,7 +949,9 @@ mod tests {
     fn test_file_browser_navigation_bounds() {
         let temp_fs = TestFileSystem::new().unwrap();
         for i in 0..10 {
-            temp_fs.create_file(&format!("file{}.txt", i), "content").unwrap();
+            temp_fs
+                .create_file(&format!("file{}.txt", i), "content")
+                .unwrap();
         }
         
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
@@ -912,7 +974,9 @@ mod tests {
     fn test_move_to_start() {
         let temp_fs = TestFileSystem::new().unwrap();
         for i in 0..10 {
-            temp_fs.create_file(&format!("file{:02}.txt", i), "content").unwrap();
+            temp_fs
+                .create_file(&format!("file{:02}.txt", i), "content")
+                .unwrap();
         }
         
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
@@ -936,7 +1000,9 @@ mod tests {
     fn test_move_to_end() {
         let temp_fs = TestFileSystem::new().unwrap();
         for i in 0..10 {
-            temp_fs.create_file(&format!("file{:02}.txt", i), "content").unwrap();
+            temp_fs
+                .create_file(&format!("file{:02}.txt", i), "content")
+                .unwrap();
         }
         
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
@@ -974,7 +1040,9 @@ mod tests {
     fn test_file_browser_scrolling() {
         let temp_fs = TestFileSystem::new().unwrap();
         for i in 0..25 {
-            temp_fs.create_file(&format!("file{:02}.txt", i), "content").unwrap();
+            temp_fs
+                .create_file(&format!("file{:02}.txt", i), "content")
+                .unwrap();
         }
         
         let browser_result = FileBrowser::new_with_dir(temp_fs.get_path());
@@ -995,5 +1063,4 @@ mod tests {
             assert!(browser.selected_index < browser.scroll_offset + browser.max_visible_files);
         }
     }
-
 }

@@ -1,7 +1,7 @@
 use crate::config::SlideshowTransitionConfig;
+use ansi_to_tui::IntoText;
 use ratatui::text::Text;
 use std::time::{Duration, Instant};
-use ansi_to_tui::IntoText;
 
 pub struct TransitionManager {
     config: SlideshowTransitionConfig,
@@ -74,7 +74,8 @@ impl TransitionManager {
                 return None;
             }
             
-            let progress = elapsed.as_millis() as f32 / self.total_transition_duration.as_millis() as f32;
+            let progress =
+                elapsed.as_millis() as f32 / self.total_transition_duration.as_millis() as f32;
             let target_frame = (progress * (self.cached_frames.len() - 1) as f32) as usize;
             
             self.current_frame_index = target_frame.min(self.cached_frames.len().saturating_sub(1));
@@ -95,7 +96,6 @@ impl TransitionManager {
         self.cached_frames.clear();
         self.current_frame_index = 0;
     }
-
 
     /// Pre-render all animation frames for smooth playback using terani-inspired effects
     fn prerender_transition_frames(&mut self, target_text: &str) {
@@ -139,7 +139,8 @@ impl TransitionManager {
         // Typewriter effect: reveal characters one by one
         let total_chars = text.chars().count();
         let visible_chars = (total_chars as f32 * progress) as usize;
-        text.chars().take(visible_chars).collect::<String>() + if progress < 1.0 { "█" } else { "" }
+        text.chars().take(visible_chars).collect::<String>()
+            + if progress < 1.0 { "█" } else { "" }
     }
 
     fn simulate_scrolling_frame(&self, text: &str, progress: f32) -> String {
@@ -160,14 +161,17 @@ impl TransitionManager {
         // Extract raw text content from ratatui Text
         // This is a simplified conversion - in practice, we may need
         // more sophisticated handling of ANSI sequences
-        text.lines.iter()
-            .map(|line| line.spans.iter()
+        text.lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
                 .map(|span| span.content.as_ref())
-                .collect::<String>())
+                    .collect::<String>()
+            })
             .collect::<Vec<String>>()
             .join("\n")
     }
-
 }
 
 #[cfg(test)]
@@ -252,14 +256,10 @@ mod tests {
         let config = SlideshowTransitionConfig::default();
         let manager = TransitionManager::new(config);
         
-        let text = Text::from(vec![
-            Line::from("Line 1"),
-            Line::from("Line 2"),
-        ]);
+        let text = Text::from(vec![Line::from("Line 1"), Line::from("Line 2")]);
         let result = manager.text_to_string(&text);
         assert_eq!(result, "Line 1\nLine 2");
     }
-
 
     #[test]
     fn test_update_config() {
@@ -279,7 +279,10 @@ mod tests {
         manager.update_config(new_config.clone());
         assert_eq!(manager.config.enabled, new_config.enabled);
         assert_eq!(manager.config.effect, new_config.effect);
-        assert_eq!(manager.config.frame_duration_ms, new_config.frame_duration_ms);
+        assert_eq!(
+            manager.config.frame_duration_ms,
+            new_config.frame_duration_ms
+        );
         assert!(!manager.is_in_transition()); // Should reset transition
     }
 

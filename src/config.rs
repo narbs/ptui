@@ -1,9 +1,9 @@
+use notify::{Event, EventKind, RecursiveMode, Watcher, event::ModifyKind};
 use serde::{Deserialize, Serialize};
 use std::error::Error;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
-use notify::{Watcher, RecursiveMode, Event, EventKind, event::ModifyKind};
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -56,10 +56,39 @@ impl Default for Jp2aConfig {
 }
 
 #[derive(Serialize, Debug, Clone, Deserialize)]
+pub struct GraphicalConfig {
+    pub filter_type: String,
+    #[serde(default = "default_max_dimension")]
+    pub max_dimension: u32,
+    /// Auto-calculate max_dimension based on terminal size (default: true)
+    #[serde(default = "default_auto_resize")]
+    pub auto_resize: bool,
+}
+
+fn default_max_dimension() -> u32 {
+    384 // Good balance between quality and speed for manual override
+}
+
+fn default_auto_resize() -> bool {
+    true
+}
+
+impl Default for GraphicalConfig {
+    fn default() -> Self {
+        Self {
+            filter_type: "lanczos3".to_string(),
+            max_dimension: default_max_dimension(),
+            auto_resize: default_auto_resize(),
+        }
+    }
+}
+
+#[derive(Serialize, Debug, Clone, Deserialize)]
 pub struct ConverterConfig {
     pub chafa: ChafaConfig,
     pub jp2a: Jp2aConfig,
-    pub selected: String, // "chafa", "jp2a"
+    pub graphical: GraphicalConfig,
+    pub selected: String, // "chafa", "jp2a", "graphical"
 }
 
 impl Default for ConverterConfig {
@@ -67,6 +96,7 @@ impl Default for ConverterConfig {
         Self {
             chafa: ChafaConfig::default(),
             jp2a: Jp2aConfig::default(),
+            graphical: GraphicalConfig::default(),
             selected: "chafa".to_string(),
         }
     }
@@ -150,7 +180,9 @@ impl PTuiConfig {
     }
 
     pub fn get_locale(&self) -> String {
-        self.locale.clone().unwrap_or_else(|| DEFAULT_LOCALE.to_string())
+        self.locale
+            .clone()
+            .unwrap_or_else(|| DEFAULT_LOCALE.to_string())
     }
 
     pub fn get_slideshow_delay_ms(&self) -> u64 {
@@ -187,14 +219,16 @@ impl PTuiConfig {
         Ok(config)
     }
 
-    pub fn start_config_watcher() -> Result<mpsc::Receiver<Result<PTuiConfig, String>>, Box<dyn Error>> {
+    pub fn start_config_watcher()
+    -> Result<mpsc::Receiver<Result<PTuiConfig, String>>, Box<dyn Error>> {
         let config_path = Self::get_config_path()?;
         let (tx, rx) = mpsc::channel();
         let config_path_clone = config_path.clone();
         let tx_clone = tx.clone();
         
         thread::spawn(move || {
-            let mut watcher = match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
+            let mut watcher =
+                match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
                 match res {
                     Ok(event) => {
                         // Only react to modify events (file content changes)
@@ -209,7 +243,10 @@ impl PTuiConfig {
                                     }
                                 }
                                 Err(e) => {
-                                    if tx_clone.send(Err(format!("Failed to reload config: {}", e))).is_err() {
+                                        if tx_clone
+                                            .send(Err(format!("Failed to reload config: {}", e)))
+                                            .is_err()
+                                        {
                                         // Channel closed, exit watcher
                                     }
                                 }
@@ -232,7 +269,8 @@ impl PTuiConfig {
             
             // Watch the config directory (not just the file, as editors often replace files)
             if let Some(config_dir) = config_path.parent()
-                && let Err(e) = watcher.watch(config_dir, RecursiveMode::NonRecursive) {
+                && let Err(e) = watcher.watch(config_dir, RecursiveMode::NonRecursive)
+            {
                     let _ = tx.send(Err(format!("Failed to watch config directory: {}", e)));
                     return;
                 }
@@ -251,8 +289,8 @@ impl PTuiConfig {
 mod tests {
     use super::*;
     use crate::test_utils::helpers::*;
-    use tempfile::TempDir;
     use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn test_chafa_config_default() {
@@ -395,6 +433,10 @@ mod tests {
                     "dither": "none",
                     "chars": null
                 },
+                "graphical": {
+                    "filter_type": "lanczos3",
+                    "max_dimension": 768
+                },
                 "selected": "chafa"
             }
         }"#;
@@ -430,7 +472,11 @@ mod tests {
     #[test]
     fn test_config_path_creation() {
         let temp_dir = TempDir::new().unwrap();
-        let nested_config_path = temp_dir.path().join("deep").join("nested").join("ptui.json");
+        let nested_config_path = temp_dir
+            .path()
+            .join("deep")
+            .join("nested")
+            .join("ptui.json");
         
         let config = PTuiConfig::create_default_config(&nested_config_path).unwrap();
         

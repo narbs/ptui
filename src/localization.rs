@@ -41,9 +41,12 @@ impl Localization {
     pub fn get(&self, key: &str) -> String {
         let args = FluentArgs::new();
         if let Some(message) = self.bundle.get_message(key)
-            && let Some(pattern) = message.value() {
+            && let Some(pattern) = message.value()
+        {
                 let mut errors = vec![];
-                let value = self.bundle.format_pattern(pattern, Some(&args), &mut errors);
+            let value = self
+                .bundle
+                .format_pattern(pattern, Some(&args), &mut errors);
                 return value.to_string();
             }
         key.to_string()
@@ -54,9 +57,12 @@ impl Localization {
         let args_ref = args.unwrap_or(&empty_args);
         
         if let Some(message) = self.bundle.get_message(key)
-            && let Some(pattern) = message.value() {
+            && let Some(pattern) = message.value()
+        {
                 let mut errors = vec![];
-                let value = self.bundle.format_pattern(pattern, Some(args_ref), &mut errors);
+            let value = self
+                .bundle
+                .format_pattern(pattern, Some(args_ref), &mut errors);
                 return value.to_string();
             }
         key.to_string()
@@ -159,7 +165,11 @@ mod tests {
         
         let localization = result.unwrap();
         let message = localization.get("select_image_to_preview");
-        assert!(!message.is_empty(), "Locale {} should have messages", locale);
+        assert!(
+            !message.is_empty(),
+            "Locale {} should have messages",
+            locale
+        );
     }
 
     #[test]

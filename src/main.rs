@@ -1,11 +1,13 @@
 mod app;
 mod config;
 mod converter;
+mod fast_image_loader;
 mod file_browser;
 mod localization;
 mod preview;
 mod transitions;
 mod ui;
+mod viuer_protocol;
 
 #[cfg(test)]
 mod test_utils;
@@ -16,9 +18,9 @@ use config::PTuiConfig;
 use crossterm::{
     event::{self, Event},
     execute,
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{Terminal, backend::CrosstermBackend};
 use std::io::stdout;
 use std::time::{Duration, Instant};
 
@@ -62,7 +64,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Check for config file changes
         if let Some(ref config_rx) = config_watcher_rx
-            && let Ok(config_result) = config_rx.try_recv() {
+            && let Ok(config_result) = config_rx.try_recv()
+        {
                 match config_result {
                     Ok(new_config) => {
                         if let Err(e) = app.handle_config_reload(new_config) {
@@ -75,7 +78,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         
+        // Only render when state has changed
+        if app.needs_redraw() {
+            // Clear Kitty graphics if switching from graphical to text mode
+            app.clear_graphics_if_needed();
         terminal.draw(|f| app.draw(f))?;
+        }
         
         // Handle events with timeout for slideshow
         if event::poll(Duration::from_millis(50))? {

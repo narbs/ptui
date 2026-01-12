@@ -1,11 +1,11 @@
 #[cfg(test)]
 pub mod helpers {
-    use crate::config::{ChafaConfig, Jp2aConfig, ConverterConfig, PTuiConfig};
-    use crate::file_browser::{FileItem};
+    use crate::config::{ChafaConfig, ConverterConfig, Jp2aConfig, PTuiConfig};
+    use crate::file_browser::FileItem;
     use std::fs;
     use std::path::Path;
-    use std::time::{UNIX_EPOCH};
-    use tempfile::{TempDir};
+    use std::time::UNIX_EPOCH;
+    use tempfile::TempDir;
 
     pub fn create_test_config() -> PTuiConfig {
         PTuiConfig {
@@ -20,6 +20,7 @@ pub mod helpers {
                     dither: "none".to_string(),
                     chars: None,
                 },
+                graphical: crate::config::GraphicalConfig::default(),
                 selected: "chafa".to_string(),
             },
             locale: Some("en".to_string()),
@@ -60,7 +61,11 @@ pub mod helpers {
             Ok(Self { temp_dir })
         }
 
-        pub fn create_file(&self, name: &str, content: &str) -> Result<String, Box<dyn std::error::Error>> {
+        pub fn create_file(
+            &self,
+            name: &str,
+            content: &str,
+        ) -> Result<String, Box<dyn std::error::Error>> {
             let file_path = self.temp_dir.path().join(name);
             fs::write(&file_path, content)?;
             Ok(file_path.to_string_lossy().to_string())
@@ -77,7 +82,11 @@ pub mod helpers {
             self.create_binary_file(name, content)
         }
 
-        pub fn create_binary_file(&self, name: &str, content: &[u8]) -> Result<String, Box<dyn std::error::Error>> {
+        pub fn create_binary_file(
+            &self,
+            name: &str,
+            content: &[u8],
+        ) -> Result<String, Box<dyn std::error::Error>> {
             let file_path = self.temp_dir.path().join(name);
             fs::write(&file_path, content)?;
             Ok(file_path.to_string_lossy().to_string())
@@ -86,11 +95,9 @@ pub mod helpers {
         pub fn get_path(&self) -> &Path {
             self.temp_dir.path()
         }
-
     }
 
     pub fn assert_file_exists(path: &str) {
         assert!(Path::new(path).exists(), "File should exist: {}", path);
     }
-
 }

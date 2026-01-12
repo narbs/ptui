@@ -98,6 +98,9 @@ Example chafa configuration:
       "dither": "none",
       "chars": null
     },
+    "graphical": {
+      "filter_type": "lanczos3"
+    },
     "selected": "chafa"
   },
   "locale": "en",

@@ -1,5 +1,6 @@
 use crate::file_browser::FileBrowser;
 use crate::localization::Localization;
+use crate::preview::PreviewContent;
 use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -7,6 +8,7 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
     Frame,
 };
+use ratatui_image::{Resize, StatefulImage};
 
 const WIDE_SCREEN_WIDTH_PERCENT: u16 = 10;
 const NARROW_SCREEN_WIDTH_PERCENT: u16 = 15;
@@ -165,20 +167,60 @@ impl UIRenderer {
     pub fn render_preview(
         f: &mut Frame,
         area: Rect,
-        preview_content: Option<&Text<'static>>,
-        is_image: bool,
+        preview_content: Option<&PreviewContent>,
         localization: &Localization,
         ascii_logo: Option<&Text<'static>>,
     ) {
         // Clear the preview area first to prevent artifacts when switching between text files
         use ratatui::widgets::Clear;
         f.render_widget(Clear, area);
-        let content = match preview_content {
-            Some(content) => content.clone(),
+
+        match preview_content {
+            Some(PreviewContent::Text(text)) => {
+                let preview_block = Block::default()
+                    .title(format!("🖼️ {}", localization.get("image_preview")))
+                    .borders(Borders::ALL);
+
+                let preview_paragraph = Paragraph::new(text.clone())
+                    .block(preview_block)
+                    .wrap(Wrap { trim: false });
+
+                f.render_widget(preview_paragraph, area);
+            }
+            Some(PreviewContent::Graphical(graphical)) => {
+                let preview_block = Block::default()
+                    .title(format!("🖼️ {}", localization.get("image_preview")))
+                    .borders(Borders::ALL);
+
+                // Render block first
+                f.render_widget(preview_block.clone(), area);
+
+                // Calculate inner area (excluding borders)
+                let inner_area = Rect {
+                    x: area.x + 1,
+                    y: area.y + 1,
+                    width: area.width.saturating_sub(2),
+                    height: area.height.saturating_sub(2),
+                };
+
+                // Use the cached protocol - no recreation needed!
+                let mut graphical_borrow = graphical.borrow_mut();
+
+                // Calculate centered area for the image
+                let centered_area = Self::calculate_centered_image_area(
+                    inner_area,
+                    graphical_borrow.img_width,
+                    graphical_borrow.img_height,
+                );
+
+                // Use Fit to fill available space
+                let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
+                f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow.protocol);
+            }
             None => {
                 // Show help text with logo if available
                 let help_text = localization.get_help_text();
-                match ascii_logo {
+                let content = match ascii_logo {
                     Some(logo) => {
                         // Start with the logo and localize any placeholders
                         let mut combined = Self::localize_logo_text(logo, localization);
@@ -195,8 +237,6 @@ impl UIRenderer {
                         combined
                     },
                     None => Text::from(help_text),
-                }
-            },
         };
 
         let preview_block = Block::default()
@@ -205,19 +245,12 @@ impl UIRenderer {
 
         let preview_paragraph = Paragraph::new(content)
             .block(preview_block)
-            .wrap(Wrap { trim: false });
-
-        // Only center horizontally for images, not text files or help screen
-        let preview_paragraph = if is_image {
-            preview_paragraph.alignment(Alignment::Center)
-        } else if preview_content.is_none() {
-            // Help screen should be left-aligned
-            preview_paragraph.alignment(Alignment::Left)
-        } else {
-            preview_paragraph
-        };
+                    .wrap(Wrap { trim: false })
+                    .alignment(Alignment::Left);
 
         f.render_widget(preview_paragraph, area);
+    }
+        }
     }
 
     fn localize_logo_text(logo: &Text<'static>, localization: &Localization) -> Text<'static> {
@@ -265,7 +298,7 @@ impl UIRenderer {
     pub fn render_slideshow(
         f: &mut Frame,
         area: Rect,
-        preview_content: Option<&Text<'static>>,
+        preview_content: Option<&PreviewContent>,
         localization: &Localization,
         current_image: usize,
         total_images: usize,
@@ -280,16 +313,35 @@ impl UIRenderer {
             .split(area);
 
         // Render the image in full screen
-        let content = match preview_content {
-            Some(content) => content.clone(),
-            None => Text::from(localization.get("no_file_selected")),
-        };
+        match preview_content {
+            Some(PreviewContent::Text(text)) => {
+                let image_paragraph = Paragraph::new(text.clone())
+                    .block(Block::default().borders(Borders::NONE))
+                    .alignment(Alignment::Center);
+                f.render_widget(image_paragraph, chunks[0]);
+            }
+            Some(PreviewContent::Graphical(graphical)) => {
+                // Use the cached protocol - no recreation needed!
+                let mut graphical_borrow = graphical.borrow_mut();
 
+                // Calculate centered area for the image
+                let centered_area = Self::calculate_centered_image_area(
+                    chunks[0],
+                    graphical_borrow.img_width,
+                    graphical_borrow.img_height,
+                );
+
+                let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
+                f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow.protocol);
+            }
+            None => {
+                let content = Text::from(localization.get("no_file_selected"));
         let image_paragraph = Paragraph::new(content)
             .block(Block::default().borders(Borders::NONE))
             .alignment(Alignment::Center);
-
         f.render_widget(image_paragraph, chunks[0]);
+            }
+        }
 
         // Render status bar
         let status_text = format!(
@@ -354,6 +406,46 @@ impl UIRenderer {
             .style(Style::default().fg(Color::Yellow));
 
         f.render_widget(dialog_paragraph, popup_area);
+    }
+
+    /// Calculate a horizontally-centered area for an image based on its aspect ratio
+    fn calculate_centered_image_area(area: Rect, img_width: u32, img_height: u32) -> Rect {
+        if img_width == 0 || img_height == 0 {
+            return area;
+        }
+
+        // Character cell aspect ratio approximation
+        // Terminal characters are typically ~2:1 (height:width) in pixel dimensions
+        // So 1 row of chars = 2 columns worth of pixels
+        let char_aspect = 2.0;
+
+        // Calculate image aspect ratio
+        let img_aspect = img_width as f32 / img_height as f32;
+
+        // Calculate fitted dimensions in character cells
+        let area_aspect = (area.width as f32) / (area.height as f32 * char_aspect);
+
+        let (fitted_width, fitted_height) = if img_aspect > area_aspect {
+            // Image is wider - fit to width
+            let fitted_width = area.width;
+            let fitted_height = (area.width as f32 / img_aspect / char_aspect) as u16;
+            (fitted_width, fitted_height.min(area.height))
+        } else {
+            // Image is taller - fit to height
+            let fitted_height = area.height;
+            let fitted_width = (area.height as f32 * char_aspect * img_aspect) as u16;
+            (fitted_width.min(area.width), fitted_height)
+        };
+
+        // Center horizontally by calculating offset
+        let x_offset = (area.width.saturating_sub(fitted_width)) / 2;
+
+        Rect {
+            x: area.x + x_offset,
+            y: area.y,
+            width: fitted_width,
+            height: fitted_height,
+        }
     }
 }
 
@@ -519,15 +611,17 @@ mod tests {
 
     #[test]
     fn test_ui_renderer_preview_with_content() {
+        use crate::preview::PreviewContent;
         let localization = crate::localization::Localization::new("en").unwrap();
         let text = Text::from("Test preview content");
+        let preview = PreviewContent::Text(text);
         let area = Rect::new(0, 0, 50, 20);
         
         let backend = ratatui::backend::TestBackend::new(50, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         
         terminal.draw(|f| {
-            UIRenderer::render_preview(f, area, Some(&text), true, &localization, None);
+            UIRenderer::render_preview(f, area, Some(&preview), &localization, None);
         }).unwrap();
     }
 
@@ -540,7 +634,7 @@ mod tests {
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         
         terminal.draw(|f| {
-            UIRenderer::render_preview(f, area, None, false, &localization, None);
+            UIRenderer::render_preview(f, area, None, &localization, None);
         }).unwrap();
     }
 
@@ -560,15 +654,17 @@ mod tests {
 
     #[test]
     fn test_ui_renderer_slideshow() {
+        use crate::preview::PreviewContent;
         let localization = crate::localization::Localization::new("en").unwrap();
         let text = Text::from("Slideshow content");
+        let preview = PreviewContent::Text(text);
         let area = Rect::new(0, 0, 80, 30);
         
         let backend = ratatui::backend::TestBackend::new(80, 30);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         
         terminal.draw(|f| {
-            UIRenderer::render_slideshow(f, area, Some(&text), &localization, 3, 10);
+            UIRenderer::render_slideshow(f, area, Some(&preview), &localization, 3, 10);
         }).unwrap();
     }
 

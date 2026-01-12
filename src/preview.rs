@@ -1,7 +1,9 @@
 use crate::config::PTuiConfig;
 use crate::converter::{self, AsciiConverter};
+use crate::fast_image_loader::FastImageLoader;
 use crate::file_browser::FileItem;
 use crate::localization::Localization;
+use crate::viuer_protocol::ViuerKittyProtocol;
 use ansi_to_tui::IntoText;
 use ratatui::text::Text;
 use std::collections::HashMap;
@@ -9,21 +11,85 @@ use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::Command;
+use std::rc::Rc;
+use std::cell::RefCell;
+use ratatui_image::protocol::StatefulProtocol;
+
+#[derive(Clone)]
+pub enum PreviewContent {
+    Text(Text<'static>),
+    Graphical(Rc<RefCell<GraphicalPreview>>),
+}
+
+pub struct GraphicalPreview {
+    pub path: String,
+    pub width: u16,
+    pub height: u16,
+    pub img_width: u32,  // Actual image pixel width
+    pub img_height: u32, // Actual image pixel height
+    pub protocol: Box<dyn StatefulProtocol>,
+}
 
 pub struct PreviewManager {
-    cache: HashMap<String, Text<'static>>,
+    cache: HashMap<String, PreviewContent>,
+    cache_order: Vec<String>, // Track insertion order for LRU eviction
+    max_cache_size: usize,
     converter: Box<dyn AsciiConverter>,
+    pub graphical_max_dimension: u32,
     pub debug_info: String,
 }
 
 impl PreviewManager {
     pub fn new(config: PTuiConfig) -> Self {
+        let graphical_max_dimension = Self::calculate_optimal_dimension(&config);
         let converter = converter::create_converter(&config);
         Self {
             cache: HashMap::new(),
+            cache_order: Vec::new(),
+            // Keep only last 5 graphical previews to avoid memory explosion
+            // Each can be 30-80MB (image + base64), so 5 = ~150-400MB max
+            max_cache_size: 5,
             converter,
+            graphical_max_dimension,
             debug_info: String::new(),
         }
+    }
+
+    /// Calculate optimal max_dimension based on terminal size
+    fn calculate_optimal_dimension(config: &PTuiConfig) -> u32 {
+        if !config.converter.graphical.auto_resize {
+            return config.converter.graphical.max_dimension;
+        }
+
+        // Get terminal size in characters
+        let (term_cols, term_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+
+        // Conservative font size estimate (optimized for speed)
+        // Smaller estimates = faster encoding, still looks good in terminal
+        let estimated_char_width = 8;   // pixels (conservative)
+        let estimated_char_height = 16; // pixels (conservative)
+
+        // Preview pane typically uses 70-85% of terminal width
+        let preview_cols = ((term_cols as f32) * 0.75) as u32;
+        let preview_rows = ((term_rows as f32) * 0.85) as u32;
+
+        // Calculate display size in pixels
+        let display_width = preview_cols * estimated_char_width;
+        let display_height = preview_rows * estimated_char_height;
+
+        // Use 0.9x multiplier for speed optimization
+        // Terminal graphics don't need high DPI - Kitty/iTerm scale well
+        let optimal = (display_width.max(display_height) as f32 * 0.9) as u32;
+
+        // Aggressive clamping for <1s load times:
+        // - 256: Minimum acceptable quality
+        // - 512: Maximum for <1s performance
+        let capped = optimal.clamp(512, 1024);
+
+        eprintln!("[AUTO-RESIZE] Terminal: {}x{} chars, Display: ~{}x{}px, Optimal: {} (capped: {})",
+            term_cols, term_rows, display_width, display_height, optimal, capped);
+
+        capped
     }
 
     pub fn get_debug_info(&self) -> &str {
@@ -41,11 +107,13 @@ impl PreviewManager {
 
     pub fn clear_cache(&mut self) {
         self.cache.clear();
+        self.cache_order.clear();
     }
 
     pub fn remove_from_cache(&mut self, file: &FileItem, width: u16, height: u16) {
         let cache_key = format!("{}:{}x{}", file.path, width, height);
         self.cache.remove(&cache_key);
+        self.cache_order.retain(|k| k != &cache_key);
     }
 
     pub fn save_ascii_to_file(&mut self, file: &FileItem, width: u16, height: u16, localization: &Localization) -> Result<String, String> {
@@ -85,27 +153,27 @@ impl PreviewManager {
         self.converter.convert_image(path, width, height)
     }
 
-    pub fn generate_preview(&mut self, file: &FileItem, width: u16, height: u16, text_scroll_offset: usize, localization: &Localization) -> Text<'static> {
+    pub fn generate_preview(&mut self, file: &FileItem, width: u16, height: u16, text_scroll_offset: usize, localization: &Localization) -> PreviewContent {
         if file.is_directory {
             self.debug_info = localization.get("directory_selected");
-            return Text::from(localization.get("directory_selected"));
+            return PreviewContent::Text(Text::from(localization.get("directory_selected")));
         }
 
         if file.is_image() {
             self.generate_image_preview(&file.path, width, height, localization)
         } else if file.is_ascii_file() {
             self.debug_info = format!("{}{}", localization.get("ascii_file_prefix"), file.name);
-            self.generate_ascii_preview(&file.path, text_scroll_offset)
+            PreviewContent::Text(self.generate_ascii_preview(&file.path, text_scroll_offset))
         } else if file.is_text_file() {
             self.debug_info = format!("{}{}", localization.get("text_file_prefix"), file.name);
-            self.generate_text_preview(&file.path, text_scroll_offset, height)
+            PreviewContent::Text(self.generate_text_preview(&file.path, text_scroll_offset, height))
         } else {
             self.debug_info = localization.get("file_type_not_supported");
-            Text::from(localization.get("not_supported_file_type"))
+            PreviewContent::Text(Text::from(localization.get("not_supported_file_type")))
         }
     }
 
-    fn generate_image_preview(&mut self, path: &str, width: u16, height: u16, localization: &Localization) -> Text<'static> {
+    fn generate_image_preview(&mut self, path: &str, width: u16, height: u16, localization: &Localization) -> PreviewContent {
         let cache_key = format!("{}:{}x{}", path, width, height);
         
         if let Some(cached) = self.cache.get(&cache_key) {
@@ -114,8 +182,65 @@ impl PreviewManager {
 
         let (converter_width, converter_height) = self.calculate_converter_dimensions(path, width, height, localization);
         
-        let result = self.render_with_converter(path, converter_width, converter_height);
-        self.cache.insert(cache_key, result.clone());
+        // Check if converter is graphical
+        let result = if self.converter.is_graphical() {
+            // Use viuer-style fast loading with custom protocol
+            use std::time::Instant;
+            let total_start = Instant::now();
+
+            let load_start = Instant::now();
+            // Use fast loader with subsampling based on target dimension
+            match FastImageLoader::load_for_display(path, self.graphical_max_dimension) {
+                Ok(img) => {
+                    let load_time = load_start.elapsed();
+                    let (img_w, img_h) = (img.width(), img.height());
+                    eprintln!("[TIMING] Total image load ({}x{}): {:?}", img_w, img_h, load_time);
+
+                    // Create custom viuer-based protocol
+                    let protocol_start = Instant::now();
+                    // Generate unique ID based on file path hash
+                    use std::collections::hash_map::DefaultHasher;
+                    use std::hash::{Hash, Hasher};
+                    let mut hasher = DefaultHasher::new();
+                    path.hash(&mut hasher);
+                    let unique_id = (hasher.finish() % 255) as u8;
+                    let protocol: Box<dyn StatefulProtocol> = Box::new(
+                        ViuerKittyProtocol::new_with_config(img, unique_id, self.graphical_max_dimension)
+                    );
+                    let protocol_time = protocol_start.elapsed();
+                    eprintln!("[TIMING] Protocol creation: {:?}", protocol_time);
+                    eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());
+
+                    PreviewContent::Graphical(Rc::new(RefCell::new(GraphicalPreview {
+                        path: path.to_string(),
+                        width: converter_width,
+                        height: converter_height,
+                        img_width: img_w,
+                        img_height: img_h,
+                        protocol,
+                    })))
+                }
+                Err(e) => {
+                    // Fallback to error text if image can't be loaded
+                    self.debug_info = format!("Failed to load image: {}", e);
+                    PreviewContent::Text(Text::from(format!("Failed to load image: {}", e)))
+                }
+            }
+        } else {
+            PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height))
+        };
+
+        // LRU cache eviction: remove oldest entry if cache is full
+        if self.cache.len() >= self.max_cache_size {
+            if let Some(oldest_key) = self.cache_order.first().cloned() {
+                self.cache.remove(&oldest_key);
+                self.cache_order.remove(0);
+                eprintln!("[CACHE] Evicted oldest entry: {}", oldest_key);
+            }
+        }
+
+        self.cache.insert(cache_key.clone(), result.clone());
+        self.cache_order.push(cache_key);
         result
     }
 
@@ -241,6 +366,7 @@ impl PreviewManager {
     }
 
     pub fn update_config(&mut self, config: PTuiConfig) {
+        self.graphical_max_dimension = Self::calculate_optimal_dimension(&config);
         self.converter = converter::create_converter(&config);
         // Clear cache since converter settings changed
         self.clear_cache();
@@ -347,7 +473,10 @@ mod tests {
         let preview = manager.generate_preview(&dir_item, 80, 24, 0, &localization);
         
         assert_eq!(manager.debug_info, localization.get("directory_selected"));
-        assert!(!preview.lines.is_empty());
+        match preview {
+            PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
+            PreviewContent::Graphical(_) => panic!("Expected text preview for directory"),
+        }
     }
 
     #[test]
@@ -369,7 +498,10 @@ mod tests {
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         
         assert!(manager.debug_info.contains("test.txt"));
-        assert!(!preview.lines.is_empty());
+        match preview {
+            PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
+            PreviewContent::Graphical(_) => panic!("Expected text preview for text file"),
+        }
     }
 
     #[test]
@@ -392,7 +524,10 @@ mod tests {
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         
         assert!(manager.debug_info.contains("test.ascii"));
-        assert!(!preview.lines.is_empty());
+        match preview {
+            PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
+            PreviewContent::Graphical(_) => panic!("Expected text preview for ascii file"),
+        }
     }
 
     #[test]
@@ -405,7 +540,10 @@ mod tests {
         let preview = manager.generate_preview(&unsupported_item, 80, 24, 0, &localization);
         
         assert_eq!(manager.debug_info, localization.get("file_type_not_supported"));
-        assert!(!preview.lines.is_empty());
+        match preview {
+            PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
+            PreviewContent::Graphical(_) => panic!("Expected text preview for unsupported file"),
+        }
     }
 
     #[test]
@@ -493,17 +631,23 @@ mod tests {
         
         // Test scrolling from the beginning (scroll_offset = 0)
         let preview1 = manager.generate_preview(&file_item, 80, 10, 0, &localization);
-        let content1 = preview1.lines.iter()
+        let content1 = match preview1 {
+            PreviewContent::Text(text) => text.lines.iter()
             .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
             .collect::<Vec<_>>()
-            .join("\n");
+                .join("\n"),
+            PreviewContent::Graphical(_) => panic!("Expected text preview"),
+        };
         
         // Test scrolling with offset
         let preview2 = manager.generate_preview(&file_item, 80, 10, 5, &localization);
-        let content2 = preview2.lines.iter()
+        let content2 = match preview2 {
+            PreviewContent::Text(text) => text.lines.iter()
             .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
             .collect::<Vec<_>>()
-            .join("\n");
+                .join("\n"),
+            PreviewContent::Graphical(_) => panic!("Expected text preview"),
+        };
         
         // The first preview should start with "Line 0"
         assert!(content1.contains("Line 0"));
@@ -535,10 +679,13 @@ mod tests {
         
         // Test with a large height parameter to see if limit is reached
         let preview = manager.generate_preview(&file_item, 80, 15000, 0, &localization);
-        let content = preview.lines.iter()
+        let content = match preview {
+            PreviewContent::Text(text) => text.lines.iter()
             .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
             .collect::<Vec<_>>()
-            .join("\n");
+                .join("\n"),
+            PreviewContent::Graphical(_) => panic!("Expected text preview"),
+        };
         
         // Should show the limit message since we have more than 10000 lines
         assert!(content.contains("file too large for scrolling"));
@@ -640,7 +787,12 @@ mod tests {
         );
         
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
-        assert!(!preview.lines.is_empty());
+        match preview {
+            PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
+            PreviewContent::Graphical(_) => {
+                // Graphical preview is also valid for images
+            }
+        }
     }
 
     #[test]
@@ -660,6 +812,9 @@ mod tests {
         );
         
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
-        assert!(!preview.lines.is_empty());
+        match preview {
+            PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
+            PreviewContent::Graphical(_) => panic!("Expected text preview for empty file"),
+        }
     }
 }

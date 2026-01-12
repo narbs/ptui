@@ -2,12 +2,12 @@ use crate::config::PTuiConfig;
 use crate::converter;
 use crate::file_browser::FileBrowser;
 use crate::localization::Localization;
-use crate::preview::PreviewManager;
+use crate::preview::{PreviewContent, PreviewManager};
 use crate::transitions::TransitionManager;
 use crate::ui::{UILayout, UIRenderer};
 use ansi_to_tui::IntoText;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use ratatui::{text::Text};
+use ratatui::text::Text;
 use std::error::Error;
 use std::process::Command;
 use std::time::{Duration, Instant};
@@ -35,7 +35,7 @@ pub struct ChafaTui {
     transition_manager: TransitionManager,
     ui_layout: UILayout,
     localization: Localization,
-    preview_content: Option<Text<'static>>,
+    preview_content: Option<PreviewContent>,
     is_preview_image: bool,
     terminal_width: u16,
     terminal_height: u16,
@@ -51,10 +51,12 @@ pub struct ChafaTui {
     slideshow_last_change: Instant,
     slideshow_delay: Duration,
     slideshow_image_files: Vec<usize>, // Indices of image files only
-    slideshow_previous_content: Option<Text<'static>>,
+    slideshow_previous_content: Option<PreviewContent>,
     // Delete confirmation dialog state
     show_delete_confirmation: bool,
     delete_target_file: Option<String>,
+    // Dirty flag for render optimization
+    needs_redraw: bool,
 }
 
 impl ChafaTui {
@@ -102,6 +104,8 @@ impl ChafaTui {
             // Delete confirmation dialog state
             show_delete_confirmation: false,
             delete_target_file: None,
+            // Dirty flag for render optimization
+            needs_redraw: true,
         };
         
         app.update_preview();
@@ -113,14 +117,19 @@ impl ChafaTui {
         let selected_converter = &config.converter.selected;
         if let Err(e) = converter::check_converter_availability(selected_converter) {
             eprintln!("Error: {} is required but {}.", selected_converter, e);
-            eprintln!("Please install {} before running this application.", selected_converter);
+            eprintln!(
+                "Please install {} before running this application.",
+                selected_converter
+            );
             return Err(format!("{} not available", selected_converter).into());
         }
         
         // Check if identify is available (from ImageMagick) - always required for dimension detection
         let identify_result = Command::new("identify").arg("-version").output();
         if identify_result.is_err() || !identify_result.unwrap().status.success() {
-            eprintln!("Error: identify application (from ImageMagick) is required but not found in PATH.");
+            eprintln!(
+                "Error: identify application (from ImageMagick) is required but not found in PATH."
+            );
             eprintln!("Please install ImageMagick before running this application.");
             return Err("identify not found".into());
         }
@@ -340,6 +349,7 @@ impl ChafaTui {
         self.terminal_width = width;
         self.terminal_height = height;
         self.update_preview();
+        self.needs_redraw = true;
     }
 
     pub fn handle_config_reload(&mut self, new_config: PTuiConfig) -> Result<(), Box<dyn Error>> {
@@ -350,7 +360,8 @@ impl ChafaTui {
         if current_locale != new_locale {
             // Reload localization
             self.localization = Localization::new(&new_locale)?;
-            self.preview_manager.debug_info = format!("Config reloaded | Locale changed to: {}", new_locale);
+            self.preview_manager.debug_info =
+                format!("Config reloaded | Locale changed to: {}", new_locale);
         } else {
             self.preview_manager.debug_info = "Config reloaded".to_string();
         }
@@ -359,7 +370,8 @@ impl ChafaTui {
         self.slideshow_delay = Duration::from_millis(new_config.get_slideshow_delay_ms());
         
         // Update transition manager config
-        self.transition_manager.update_config(new_config.get_slideshow_transitions());
+        self.transition_manager
+            .update_config(new_config.get_slideshow_transitions());
         
         // Update preview manager config (for converter settings)
         self.preview_manager.update_config(new_config);
@@ -369,8 +381,18 @@ impl ChafaTui {
         
         // Update preview to reflect changes
         self.update_preview();
+        self.needs_redraw = true;
         
         Ok(())
+    }
+
+    pub fn needs_redraw(&mut self) -> bool {
+        if self.needs_redraw {
+            self.needs_redraw = false;
+            true
+        } else {
+            false
+        }
     }
 
     fn update_preview(&mut self) {
@@ -392,11 +414,13 @@ impl ChafaTui {
             self.preview_content = None;
             self.is_preview_image = false;
         }
+        self.needs_redraw = true;
     }
 
     fn refresh_current_preview(&mut self) {
         if let Some(file) = self.file_browser.get_selected_file()
-            && file.can_preview() {
+            && file.can_preview()
+        {
                 self.preview_manager.remove_from_cache(
                     file,
                     self.ui_layout.preview_width,
@@ -417,24 +441,30 @@ impl ChafaTui {
                 Ok(success_msg) => {
                     // Update debug info with success message
                     let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!("{} | {}", current_debug, success_msg);
+                    self.preview_manager.debug_info =
+                        format!("{} | {}", current_debug, success_msg);
                     
                     // Refresh file list to show the new ASCII file
                     if let Err(e) = self.file_browser.refresh_files() {
                         let current_debug = self.preview_manager.get_debug_info();
-                        self.preview_manager.debug_info = format!("{} | WARNING: Failed to refresh file list: {}", current_debug, e);
+                        self.preview_manager.debug_info = format!(
+                            "{} | WARNING: Failed to refresh file list: {}",
+                            current_debug, e
+                        );
                     }
                 }
                 Err(error_msg) => {
                     // Update debug info with error message
                     let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!("{} | ERROR: {}", current_debug, error_msg);
+                    self.preview_manager.debug_info =
+                        format!("{} | ERROR: {}", current_debug, error_msg);
                 }
             }
         } else {
             // Update debug info when no file is selected
             let current_debug = self.preview_manager.get_debug_info();
-            self.preview_manager.debug_info = format!("{} | ERROR: No file selected", current_debug);
+            self.preview_manager.debug_info =
+                format!("{} | ERROR: No file selected", current_debug);
         }
     }
 
@@ -443,15 +473,18 @@ impl ChafaTui {
             if file.is_directory {
                 // Don't allow deleting directories
                 let current_debug = self.preview_manager.get_debug_info();
-                self.preview_manager.debug_info = format!("{} | ERROR: Cannot delete directories", current_debug);
+                self.preview_manager.debug_info =
+                    format!("{} | ERROR: Cannot delete directories", current_debug);
                 return;
             }
             
             self.show_delete_confirmation = true;
             self.delete_target_file = Some(file.name.clone());
+            self.needs_redraw = true;
         } else {
             let current_debug = self.preview_manager.get_debug_info();
-            self.preview_manager.debug_info = format!("{} | ERROR: No file selected", current_debug);
+            self.preview_manager.debug_info =
+                format!("{} | ERROR: No file selected", current_debug);
         }
     }
 
@@ -478,6 +511,7 @@ impl ChafaTui {
     fn hide_delete_dialog(&mut self) {
         self.show_delete_confirmation = false;
         self.delete_target_file = None;
+        self.needs_redraw = true;
     }
 
     fn delete_current_file(&mut self, file_name: String) -> Result<(), Box<dyn Error>> {
@@ -487,12 +521,16 @@ impl ChafaTui {
             match std::fs::remove_file(file_path) {
                 Ok(()) => {
                     let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!("{} | Deleted: {}", current_debug, file_name);
+                    self.preview_manager.debug_info =
+                        format!("{} | Deleted: {}", current_debug, file_name);
                     
                     // Refresh file list to remove deleted file
                     if let Err(e) = self.file_browser.refresh_files() {
                         let current_debug = self.preview_manager.get_debug_info();
-                        self.preview_manager.debug_info = format!("{} | WARNING: Failed to refresh file list: {}", current_debug, e);
+                        self.preview_manager.debug_info = format!(
+                            "{} | WARNING: Failed to refresh file list: {}",
+                            current_debug, e
+                        );
                     }
                     
                     // Update preview after refresh
@@ -500,7 +538,10 @@ impl ChafaTui {
                 }
                 Err(e) => {
                     let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!("{} | ERROR: Failed to delete {}: {}", current_debug, file_name, e);
+                    self.preview_manager.debug_info = format!(
+                        "{} | ERROR: Failed to delete {}: {}",
+                        current_debug, file_name, e
+                    );
                 }
             }
         }
@@ -518,7 +559,14 @@ impl ChafaTui {
                 file_path.parent().unwrap_or(file_path)
             };
 
-            let result = self.open_path_in_system_browser(target_path, if file.is_directory { None } else { Some(file_path) });
+            let result = self.open_path_in_system_browser(
+                target_path,
+                if file.is_directory {
+                    None
+                } else {
+                    Some(file_path)
+                },
+            );
             
             match result {
                 Ok(()) => {
@@ -528,12 +576,14 @@ impl ChafaTui {
                         self.localization.get("opened_file_in_browser")
                     };
                     let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!("{} | {}: {}", current_debug, message, file.name);
+                    self.preview_manager.debug_info =
+                        format!("{} | {}: {}", current_debug, message, file.name);
                 }
                 Err(e) => {
                     let error_msg = self.localization.get("failed_to_open_in_browser");
                     let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!("{} | {}: {}", current_debug, error_msg, e);
+                    self.preview_manager.debug_info =
+                        format!("{} | {}: {}", current_debug, error_msg, e);
                 }
             }
         } else {
@@ -544,7 +594,11 @@ impl ChafaTui {
     }
 
     #[cfg(target_os = "macos")]
-    fn open_path_in_system_browser(&self, dir_path: &std::path::Path, file_path: Option<&std::path::Path>) -> Result<(), Box<dyn Error>> {
+    fn open_path_in_system_browser(
+        &self,
+        dir_path: &std::path::Path,
+        file_path: Option<&std::path::Path>,
+    ) -> Result<(), Box<dyn Error>> {
         if let Some(file) = file_path {
             // On macOS, we can use 'open -R' to reveal the file in Finder
             Command::new("open")
@@ -552,30 +606,34 @@ impl ChafaTui {
                 .spawn()?;
         } else {
             // Open directory normally
-            Command::new("open")
-                .arg(dir_path)
-                .spawn()?;
+            Command::new("open").arg(dir_path).spawn()?;
         }
         Ok(())
     }
 
     #[cfg(target_os = "windows")]
-    fn open_path_in_system_browser(&self, dir_path: &std::path::Path, file_path: Option<&std::path::Path>) -> Result<(), Box<dyn Error>> {
+    fn open_path_in_system_browser(
+        &self,
+        dir_path: &std::path::Path,
+        file_path: Option<&std::path::Path>,
+    ) -> Result<(), Box<dyn Error>> {
         if let Some(file) = file_path {
             // On Windows, we can use explorer.exe /select to open and highlight the file
             Command::new("explorer")
                 .args(&["/select,", &file.to_string_lossy()])
                 .spawn()?;
         } else {
-            Command::new("explorer")
-                .arg(dir_path)
-                .spawn()?;
+            Command::new("explorer").arg(dir_path).spawn()?;
         }
         Ok(())
     }
 
     #[cfg(target_os = "linux")]
-    fn open_path_in_system_browser(&self, dir_path: &std::path::Path, file_path: Option<&std::path::Path>) -> Result<(), Box<dyn Error>> {
+    fn open_path_in_system_browser(
+        &self,
+        dir_path: &std::path::Path,
+        file_path: Option<&std::path::Path>,
+    ) -> Result<(), Box<dyn Error>> {
         // Try different file managers with file selection support where available
         let file_managers_with_selection = [
             ("nautilus", vec!["--select"]),
@@ -588,7 +646,12 @@ impl ChafaTui {
         // First try file managers that support file selection
         if let Some(file) = file_path {
             for (manager, args) in &file_managers_with_selection {
-                if Command::new("which").arg(manager).output()?.status.success() {
+                if Command::new("which")
+                    .arg(manager)
+                    .output()?
+                    .status
+                    .success()
+                {
                     let mut cmd = Command::new(manager);
                     
                     if !args.is_empty() {
@@ -611,10 +674,13 @@ impl ChafaTui {
         
         // Fall back to basic file managers (just open directory)
         for manager in &file_managers_basic {
-            if Command::new("which").arg(manager).output()?.status.success() {
-                Command::new(manager)
-                    .arg(dir_path)
-                    .spawn()?;
+            if Command::new("which")
+                .arg(manager)
+                .output()?
+                .status
+                .success()
+            {
+                Command::new(manager).arg(dir_path).spawn()?;
                 return Ok(());
             }
         }
@@ -622,10 +688,13 @@ impl ChafaTui {
         // Last resort: try all the managers we know about for directory opening
         let all_managers = ["nautilus", "dolphin", "thunar", "pcmanfm"];
         for manager in &all_managers {
-            if Command::new("which").arg(manager).output()?.status.success() {
-                Command::new(manager)
-                    .arg(dir_path)
-                    .spawn()?;
+            if Command::new("which")
+                .arg(manager)
+                .output()?
+                .status
+                .success()
+            {
+                Command::new(manager).arg(dir_path).spawn()?;
                 return Ok(());
             }
         }
@@ -634,7 +703,11 @@ impl ChafaTui {
     }
 
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-    fn open_path_in_system_browser(&self, _dir_path: &std::path::Path, _file_path: Option<&std::path::Path>) -> Result<(), Box<dyn Error>> {
+    fn open_path_in_system_browser(
+        &self,
+        _dir_path: &std::path::Path,
+        _file_path: Option<&std::path::Path>,
+    ) -> Result<(), Box<dyn Error>> {
         Err("Opening system file browser not supported on this platform".into())
     }
 
@@ -656,7 +729,11 @@ impl ChafaTui {
         }
         
         // Find the position of current selection in image files list
-        if let Some(pos) = self.slideshow_image_files.iter().position(|&i| i == self.slideshow_start_index) {
+        if let Some(pos) = self
+            .slideshow_image_files
+            .iter()
+            .position(|&i| i == self.slideshow_start_index)
+        {
             self.slideshow_current_index = pos;
         } else {
             // Current selection is not an image, start with first image
@@ -676,12 +753,15 @@ impl ChafaTui {
         self.is_slideshow_mode = false;
         
         // Select the current slideshow file in the file browser
-        if !self.slideshow_image_files.is_empty() && self.slideshow_current_index < self.slideshow_image_files.len() {
+        if !self.slideshow_image_files.is_empty()
+            && self.slideshow_current_index < self.slideshow_image_files.len()
+        {
             let current_file_index = self.slideshow_image_files[self.slideshow_current_index];
             self.file_browser.set_selected_index(current_file_index);
         } else {
             // Fallback to original selection if something went wrong
-            self.file_browser.set_selected_index(self.slideshow_start_index);
+            self.file_browser
+                .set_selected_index(self.slideshow_start_index);
         }
         
         self.update_preview();
@@ -695,24 +775,30 @@ impl ChafaTui {
         // Store current content for potential transition
         self.slideshow_previous_content = self.preview_content.clone();
         
-        self.slideshow_current_index = (self.slideshow_current_index + 1) % self.slideshow_image_files.len();
+        self.slideshow_current_index =
+            (self.slideshow_current_index + 1) % self.slideshow_image_files.len();
         self.slideshow_last_change = Instant::now();
         self.update_slideshow_preview();
         
         // Check if we should start a transition effect
+        // Transitions only work with Text content (ASCII art), not graphical content
         if self.transition_manager.is_enabled() 
             && self.preview_manager.converter_supports_transitions()
-            && self.slideshow_previous_content.is_some()
-            && self.preview_content.is_some()
-            
             && let (Some(prev_content), Some(new_content)) = 
                 (&self.slideshow_previous_content, &self.preview_content)
-                
-                && self.transition_manager.start_transition(prev_content, new_content) {
+            && let (PreviewContent::Text(prev_text), PreviewContent::Text(new_text)) =
+                (prev_content, new_content)
+            && self
+                .transition_manager
+                .start_transition(prev_text, new_text)
+        {
                     // Successfully started transition
                     let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!("{} | Starting {} transition", 
-                        current_debug, self.transition_manager.get_effect_name());
+            self.preview_manager.debug_info = format!(
+                "{} | Starting {} transition",
+                current_debug,
+                self.transition_manager.get_effect_name()
+            );
                 }
     }
     
@@ -734,19 +820,24 @@ impl ChafaTui {
         self.update_slideshow_preview();
         
         // Check if we should start a transition effect (same as advance_slideshow)
+        // Transitions only work with Text content (ASCII art), not graphical content
         if self.transition_manager.is_enabled() 
             && self.preview_manager.converter_supports_transitions()
-            && self.slideshow_previous_content.is_some()
-            && self.preview_content.is_some()
-            
             && let (Some(prev_content), Some(new_content)) = 
                 (&self.slideshow_previous_content, &self.preview_content)
-                
-                && self.transition_manager.start_transition(prev_content, new_content) {
+            && let (PreviewContent::Text(prev_text), PreviewContent::Text(new_text)) =
+                (prev_content, new_content)
+            && self
+                .transition_manager
+                .start_transition(prev_text, new_text)
+        {
                     // Successfully started transition
                     let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!("{} | Starting {} transition", 
-                        current_debug, self.transition_manager.get_effect_name());
+            self.preview_manager.debug_info = format!(
+                "{} | Starting {} transition",
+                current_debug,
+                self.transition_manager.get_effect_name()
+            );
                 }
     }
     
@@ -773,6 +864,7 @@ impl ChafaTui {
             // Only advance slideshow if no transition is in progress
             if !self.transition_manager.is_in_transition() {
                 self.advance_slideshow();
+                self.needs_redraw = true;
             }
         }
     }
@@ -783,6 +875,7 @@ impl ChafaTui {
             // Check if transition frame has changed
             let _current_frame = self.transition_manager.get_current_transition_frame();
             // A frame change or completion indicates we need to redraw
+            self.needs_redraw = true;
             true
         } else {
             false
@@ -798,8 +891,12 @@ impl ChafaTui {
         
         if self.is_slideshow_mode {
             // Check if we have a transition in progress
-            let display_content = if let Some(transition_frame) = self.transition_manager.get_current_transition_frame() {
-                Some(transition_frame)
+            let transition_content: Option<PreviewContent>;
+            let display_content = if let Some(transition_frame) =
+                self.transition_manager.get_current_transition_frame()
+            {
+                transition_content = Some(PreviewContent::Text(transition_frame.clone()));
+                transition_content.as_ref()
             } else {
                 self.preview_content.as_ref()
             };
@@ -825,17 +922,22 @@ impl ChafaTui {
                 f,
                 preview_area,
                 self.preview_content.as_ref(),
-                self.is_preview_image,
                 &self.localization,
                 self.ascii_logo.as_ref(),
             );
             
-            UIRenderer::render_debug_pane(f, debug_area, self.preview_manager.get_debug_info(), &self.localization);
+            UIRenderer::render_debug_pane(
+                f,
+                debug_area,
+                self.preview_manager.get_debug_info(),
+                &self.localization,
+            );
         }
 
         // Render delete confirmation dialog overlay if needed
         if self.show_delete_confirmation
-            && let Some(ref file_name) = self.delete_target_file {
+            && let Some(ref file_name) = self.delete_target_file
+        {
                 UIRenderer::render_delete_confirmation_dialog(f, size, file_name, &self.localization);
             }
     }
@@ -864,4 +966,19 @@ impl ChafaTui {
         self.text_scroll_offset = 0;
     }
 
+    /// Clear Kitty graphics protocol images from the terminal
+    /// This should be called when switching from graphical to text mode
+    pub fn clear_graphics_if_needed(&self) {
+        // Check if current preview is text-based (not graphical)
+        let is_current_graphical = matches!(&self.preview_content, Some(PreviewContent::Graphical(_)));
+
+        // If we're not showing graphical content, clear any lingering images
+        if !is_current_graphical {
+            use std::io::Write;
+            // Send Kitty protocol command to delete all images
+            let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
+            let _ = std::io::stdout().write_all(delete_all_cmd.as_bytes());
+            let _ = std::io::stdout().flush();
+        }
+    }
 }

@@ -1,0 +1,147 @@
+   Compiling ptui v1.0.12 (/home/narbs/Projects/ptui)
+warning: field `unique_id` is never read
+  --> src/viuer_protocol.rs:24:5
+   |
+14 | pub struct ViuerKittyProtocol {
+   |            ------------------ field in this struct
+...
+24 |     unique_id: u8,
+   |     ^^^^^^^^^
+   |
+   = note: `ViuerKittyProtocol` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: `ptui` (lib) generated 1 warning
+warning: method `can_render_graphically` is never used
+   --> src/converter.rs:137:12
+    |
+121 | impl GraphicalConverter {
+    | ----------------------- method in this implementation
+...
+137 |     pub fn can_render_graphically(&self) -> bool {
+    |            ^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: fields `path`, `width`, and `height` are never read
+  --> src/preview.rs:24:9
+   |
+23 | pub struct GraphicalPreview {
+   |            ---------------- fields in this struct
+24 |     pub path: String,
+   |         ^^^^
+25 |     pub width: u16,
+   |         ^^^^^
+26 |     pub height: u16,
+   |         ^^^^^^
+
+warning: field `unique_id` is never read
+  --> src/viuer_protocol.rs:24:5
+   |
+14 | pub struct ViuerKittyProtocol {
+   |            ------------------ field in this struct
+...
+24 |     unique_id: u8,
+   |     ^^^^^^^^^
+   |
+   = note: `ViuerKittyProtocol` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: associated function `new` is never used
+  --> src/viuer_protocol.rs:30:12
+   |
+29 | impl ViuerKittyProtocol {
+   | ----------------------- associated function in this implementation
+30 |     pub fn new(image: DynamicImage, unique_id: u8) -> Self {
+   |            ^^^
+
+warning: `ptui` (bin "ptui") generated 4 warnings
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.63s
+     Running `target/debug/ptui`
+Using graphical mode with protocol: Kitty
+[TIMING] Image load (2731x1510): 1.186476639s
+[TIMING] Protocol creation: 9.137µs
+[TIMING] TOTAL preview generation: 1.186565706s
+[TIMING] Resize 2731x1510 -> 320x176: 63.769987ms
+[TIMING] Base64 encode (320x176 = 0MB): 805.244µs
+[TIMING] resize_encode TOTAL: 64.65412ms
+[TIMING] Image load (2048x1536): 495.021931ms
+[TIMING] Protocol creation: 8.085µs
+[TIMING] TOTAL preview generation: 495.100027ms
+[TIMING] Resize 2048x1536 -> 320x240: 49.930587ms
+[TIMING] Base64 encode (320x240 = 0MB): 11.705802ms
+[TIMING] resize_encode TOTAL: 61.700058ms
+[TIMING] Image load (2316x3088): 1.184841844s
+[TIMING] Protocol creation: 8.445µs
+[TIMING] TOTAL preview generation: 1.184931662s
+[TIMING] Resize 2316x3088 -> 240x320: 72.1538ms
+[TIMING] Base64 encode (240x320 = 0MB): 11.628387ms
+[TIMING] resize_encode TOTAL: 83.841228ms
+[TIMING] Image load (4032x3024): 1.869725913s
+[TIMING] Protocol creation: 8.566µs
+[TIMING] TOTAL preview generation: 1.869804471s
+[TIMING] Resize 4032x3024 -> 320x240: 89.177703ms
+[TIMING] Base64 encode (320x240 = 0MB): 11.63536ms
+[TIMING] resize_encode TOTAL: 100.872524ms
+[TIMING] Image load (4032x3024): 1.870174912s
+[TIMING] Protocol creation: 7.344µs
+[TIMING] TOTAL preview generation: 1.87022725s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/0-svg-sample.svg:209x61
+[TIMING] Resize 4032x3024 -> 320x240: 95.979769ms
+[TIMING] Base64 encode (320x240 = 0MB): 12.1653ms
+[TIMING] resize_encode TOTAL: 108.223064ms
+[TIMING] Image load (3024x4032): 1.822018717s
+[TIMING] Protocol creation: 8.727µs
+[TIMING] TOTAL preview generation: 1.822096372s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/1.png:209x61
+[TIMING] Resize 3024x4032 -> 240x320: 88.354828ms
+[TIMING] Base64 encode (240x320 = 0MB): 11.623937ms
+[TIMING] resize_encode TOTAL: 100.029251ms
+[TIMING] Image load (4284x5712): 4.120588641s
+[TIMING] Protocol creation: 8.857µs
+[TIMING] TOTAL preview generation: 4.120654474s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/IMG_0010.jpeg:209x61
+[TIMING] Resize 4284x5712 -> 240x320: 121.905851ms
+[TIMING] Base64 encode (240x320 = 0MB): 11.73311ms
+[TIMING] resize_encode TOTAL: 133.713471ms
+[TIMING] Image load (2316x3088): 1.166130724s
+[TIMING] Protocol creation: 8.095µs
+[TIMING] TOTAL preview generation: 1.166200845s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/IMG_0033.jpeg:209x61
+[TIMING] Resize 2316x3088 -> 240x320: 70.669958ms
+[TIMING] Base64 encode (240x320 = 0MB): 11.718773ms
+[TIMING] resize_encode TOTAL: 82.455476ms
+[TIMING] Image load (4032x3024): 2.142360239s
+[TIMING] Protocol creation: 8.927µs
+[TIMING] TOTAL preview generation: 2.14244076s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/IMG_0101.jpeg:209x61
+[TIMING] Resize 4032x3024 -> 320x240: 89.507151ms
+[TIMING] Base64 encode (320x240 = 0MB): 11.71268ms
+[TIMING] resize_encode TOTAL: 101.27192ms
+[TIMING] Image load (4032x3024): 1.830400949s
+[TIMING] Protocol creation: 8.346µs
+[TIMING] TOTAL preview generation: 1.830474496s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/IMG_0127.jpeg:209x61
+[TIMING] Resize 4032x3024 -> 320x240: 88.777825ms
+[TIMING] Base64 encode (320x240 = 0MB): 11.705928ms
+[TIMING] resize_encode TOTAL: 100.560095ms
+[TIMING] Image load (5712x4284): 3.631176737s
+[TIMING] Protocol creation: 7.264µs
+[TIMING] TOTAL preview generation: 3.631256456s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/IMG_0132.jpeg:209x61
+[TIMING] Resize 5712x4284 -> 320x240: 122.292996ms
+[TIMING] Base64 encode (320x240 = 0MB): 11.714913ms
+[TIMING] resize_encode TOTAL: 134.068533ms
+[TIMING] Image load (4032x3024): 1.899368304s
+[TIMING] Protocol creation: 10.088µs
+[TIMING] TOTAL preview generation: 1.899456087s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/IMG_0712.jpeg:209x61
+[TIMING] Resize 4032x3024 -> 320x240: 89.452555ms
+[TIMING] Base64 encode (320x240 = 0MB): 11.693062ms
+[TIMING] resize_encode TOTAL: 101.210539ms
+[TIMING] Image load (4032x3024): 1.907978865s
+[TIMING] Protocol creation: 8.436µs
+[TIMING] TOTAL preview generation: 1.908060918s
+[CACHE] Evicted oldest entry: /home/narbs/Projects/ptui/images/IMG_0752.jpeg:209x61
+[TIMING] Resize 4032x3024 -> 320x240: 88.769864ms
+[TIMING] Base64 encode (320x240 = 0MB): 11.648027ms
+[TIMING] resize_encode TOTAL: 100.473745ms

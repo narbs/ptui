@@ -1,10 +1,14 @@
 use crate::config::{ChafaConfig, Jp2aConfig, PTuiConfig};
 use std::process::Command;
+use ratatui_image::picker::{Picker, ProtocolType};
 
 pub trait AsciiConverter {
     fn convert_image(&self, path: &str, width: u16, height: u16) -> Result<String, String>;
     fn get_name(&self) -> &'static str;
     fn supports_transitions(&self) -> bool;
+    fn is_graphical(&self) -> bool {
+        false
+    }
 }
 
 pub struct ChafaConverter {
@@ -109,9 +113,72 @@ impl AsciiConverter for Jp2aConverter {
     }
 }
 
+pub struct GraphicalConverter {
+    protocol_type: ProtocolType,
+    fallback_converter: Box<dyn AsciiConverter>,
+}
+
+impl GraphicalConverter {
+    pub fn new(fallback_config: ChafaConfig) -> Result<Self, String> {
+        // Try protocol detection
+        let mut picker = Picker::from_termios().map_err(|e| format!("Failed to create picker: {:?}", e))?;
+        picker.guess_protocol();
+        let protocol_type = picker.protocol_type;
+
+        // Always create fallback converter
+        let fallback_converter = Box::new(ChafaConverter::new(fallback_config));
+
+        Ok(Self {
+            protocol_type,
+            fallback_converter,
+        })
+    }
+
+    pub fn can_render_graphically(&self) -> bool {
+        // Protocol type is always set, graphical rendering is always available
+        true
+    }
+
+    pub fn get_protocol_type(&self) -> &ProtocolType {
+        &self.protocol_type
+    }
+}
+
+impl AsciiConverter for GraphicalConverter {
+    fn convert_image(&self, path: &str, width: u16, height: u16) -> Result<String, String> {
+        // This is used as fallback when graphical rendering fails
+        self.fallback_converter.convert_image(path, width, height)
+    }
+
+    fn get_name(&self) -> &'static str {
+        "graphical"
+    }
+
+    fn supports_transitions(&self) -> bool {
+        // Graphical rendering doesn't support character-based transitions
+        false
+    }
+
+    fn is_graphical(&self) -> bool {
+        true
+    }
+}
+
 pub fn create_converter(config: &PTuiConfig) -> Box<dyn AsciiConverter> {
     match config.converter.selected.as_str() {
         "jp2a" => Box::new(Jp2aConverter::new(config.converter.jp2a.clone())),
+        "graphical" => {
+            match GraphicalConverter::new(config.converter.chafa.clone()) {
+                Ok(converter) => {
+                    eprintln!("Using graphical mode with protocol: {:?}", converter.get_protocol_type());
+                    Box::new(converter)
+                }
+                Err(e) => {
+                    eprintln!("Failed to initialize graphical mode: {}. Falling back to chafa.", e);
+                    Box::new(ChafaConverter::new(config.converter.chafa.clone()))
+                }
+            }
+        }
         "chafa" => Box::new(ChafaConverter::new(config.converter.chafa.clone())),
         _ => Box::new(ChafaConverter::new(config.converter.chafa.clone())), // Default to chafa
     }
@@ -121,6 +188,11 @@ pub fn check_converter_availability(converter_name: &str) -> Result<(), String> 
     let result = match converter_name {
         "chafa" => Command::new("chafa").arg("--version").output(),
         "jp2a" => Command::new("jp2a").arg("--version").output(),
+        "graphical" => {
+            // Graphical mode doesn't require external tools, just terminal support
+            // The actual protocol detection happens at runtime in GraphicalConverter::new()
+            return Ok(());
+        }
         _ => return Err(format!("Unknown converter: {}", converter_name)),
     };
 

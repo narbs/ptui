@@ -1,7 +1,7 @@
 // build.rs: Embed all locale files into a generated Rust source file
 use std::fs;
-use std::path::Path;
 use std::io::Write;
+use std::path::Path;
 
 fn main() {
     let locales_dir = "./locales";
@@ -10,7 +10,11 @@ fn main() {
     let mut out = fs::File::create(&dest_path).unwrap();
 
     writeln!(out, "use std::collections::HashMap;").unwrap();
-    writeln!(out, "pub fn get_embedded_locales() -> HashMap<&'static str, &'static str> {{").unwrap();
+    writeln!(
+        out,
+        "pub fn get_embedded_locales() -> HashMap<&'static str, &'static str> {{"
+    )
+    .unwrap();
     writeln!(out, "    let mut map = HashMap::new();").unwrap();
 
     for entry in fs::read_dir(locales_dir).unwrap() {
@@ -23,7 +27,12 @@ fn main() {
                 let content = fs::read_to_string(&ftl_path).unwrap();
                 // Escape double quotes and backslashes
                 let content_escaped = content.replace("\\", "\\\\").replace("\"", "\\\"");
-                writeln!(out, "    map.insert(\"{}\", \"{}\");", locale, content_escaped).unwrap();
+                writeln!(
+                    out,
+                    "    map.insert(\"{}\", \"{}\");",
+                    locale, content_escaped
+                )
+                .unwrap();
             }
         }
     }
