@@ -20,13 +20,15 @@ pub struct ViuerKittyProtocol {
     rect: Rect,
     /// Track if we need to retransmit
     needs_retransmit: bool,
-    /// Unique ID for this image in the Kitty protocol
+    /// Unique ID for this image in the Kitty protocol (stored for future use)
+    #[allow(dead_code)]
     unique_id: u8,
     /// Maximum dimension for downscaling (configurable)
     max_dimension: u32,
 }
 
 impl ViuerKittyProtocol {
+    #[allow(dead_code)]
     pub fn new(image: DynamicImage, unique_id: u8) -> Self {
         Self::new_with_config(image, unique_id, 1024)
     }

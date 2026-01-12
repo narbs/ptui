@@ -176,14 +176,21 @@ impl FastImageLoader {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn test_scale_factor_calculation() {
-        // 4032px image, target 512px: should use 1/8 (4032/8 = 504, close to 512)
-        assert_eq!(8, if 4032 > 512 * 8 { 8 } else if 4032 > 512 * 4 { 4 } else { 1 });
+        // 4032px image, target 512px:
+        // Is 4032 > 512 * 8 (4096)? No
+        // Is 4032 > 512 * 4 (2048)? Yes -> Use 1/4 scale
+        assert_eq!(4, if 4032 > 512 * 8 { 8 } else if 4032 > 512 * 4 { 4 } else if 4032 > 512 * 2 { 2 } else { 1 });
 
-        // 2048px image, target 512px: should use 1/4
-        assert_eq!(4, if 2048 > 512 * 8 { 8 } else if 2048 > 512 * 4 { 4 } else if 2048 > 512 * 2 { 2 } else { 1 });
+        // 2048px image, target 512px:
+        // Is 2048 > 512 * 8? No
+        // Is 2048 > 512 * 4 (2048)? No (not strictly greater)
+        // Is 2048 > 512 * 2 (1024)? Yes -> Use 1/2 scale
+        assert_eq!(2, if 2048 > 512 * 8 { 8 } else if 2048 > 512 * 4 { 4 } else if 2048 > 512 * 2 { 2 } else { 1 });
+
+        // 5000px image, target 512px: should use 1/8
+        // Is 5000 > 512 * 8 (4096)? Yes -> Use 1/8 scale
+        assert_eq!(8, if 5000 > 512 * 8 { 8 } else if 5000 > 512 * 4 { 4 } else if 5000 > 512 * 2 { 2 } else { 1 });
     }
 }

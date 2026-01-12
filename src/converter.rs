@@ -134,6 +134,7 @@ impl GraphicalConverter {
         })
     }
 
+    #[allow(dead_code)]
     pub fn can_render_graphically(&self) -> bool {
         // Protocol type is always set, graphical rendering is always available
         true

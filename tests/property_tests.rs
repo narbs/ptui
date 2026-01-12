@@ -69,6 +69,7 @@ proptest! {
                     colors: colors.clone(),
                 },
                 jp2a: config::Jp2aConfig::default(),
+                graphical: config::GraphicalConfig::default(),
                 selected: converter_selected.clone(),
             },
             locale: locale.clone(),
@@ -169,6 +170,7 @@ proptest! {
                     dither: "none".to_string(),
                     chars: None,
                 },
+                graphical: config::GraphicalConfig::default(),
                 selected: selected.clone(),
             },
             ..Default::default()

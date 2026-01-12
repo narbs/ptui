@@ -22,8 +22,11 @@ pub enum PreviewContent {
 }
 
 pub struct GraphicalPreview {
+    #[allow(dead_code)]
     pub path: String,
+    #[allow(dead_code)]
     pub width: u16,
+    #[allow(dead_code)]
     pub height: u16,
     pub img_width: u32,  // Actual image pixel width
     pub img_height: u32, // Actual image pixel height
