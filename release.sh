@@ -135,8 +135,8 @@ bump_version() {
 
 # Function to build and test
 build_and_test() {
-  echo_info "Building project..."
-  if ! cargo build --release; then
+  echo_info "Building project with fast-jpeg feature..."
+  if ! cargo build --release --features fast-jpeg; then
     echo_error "Build failed!"
     exit 1
   fi
@@ -181,6 +181,12 @@ build_aur_package() {
   echo_info "Building AUR package..."
   if ! cargo aur; then
     echo_error "cargo aur failed!"
+    exit 1
+  fi
+
+  echo_info "Patching PKGBUILD to add --features fast-jpeg..."
+  if ! ./patch-aur-pkgbuild.sh; then
+    echo_error "Failed to patch PKGBUILD!"
     exit 1
   fi
 

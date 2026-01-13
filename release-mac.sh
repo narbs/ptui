@@ -2,8 +2,8 @@
 
 set -e
 
-echo "Building PTUI for release..."
-cargo build --release
+echo "Building PTUI for release with fast-jpeg feature..."
+cargo build --release --features fast-jpeg
 
 VERSION=$(grep '^version = ' Cargo.toml | sed 's/version = "\(.*\)"/\1/')
 
