@@ -189,18 +189,26 @@ impl StatefulProtocol for ViuerKittyProtocol {
             return;
         }
 
+        // IMPORTANT: Write image escape sequences DIRECTLY to stdout, not through ratatui's buffer
+        // This prevents iTerm2 from misinterpreting fragmented escape sequences as terminal commands
+        use std::io::Write;
+
         // Clear the screen area by deleting all images with action 'a=d,d=a' (delete all)
-        // This ensures old images don't remain visible
         let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
 
-        // Write the delete-all command followed by the new image escape sequence
-        let full_sequence = format!("{}{}", delete_all_cmd, &self.escape_sequence);
+        // Position cursor at the render area before writing the image sequence
+        // This ensures the image appears in the correct location
+        let position_cmd = format!("\x1b[{};{}H", area.top() + 1, area.left() + 1);
 
-        // Write into the first cell of the area
-        // The Kitty protocol will handle the actual image placement
+        // Write directly to stdout: position + delete-all + image sequence
+        let full_sequence = format!("{}{}{}", position_cmd, delete_all_cmd, &self.escape_sequence);
+        let _ = std::io::stdout().write_all(full_sequence.as_bytes());
+        let _ = std::io::stdout().flush();
+
+        // Mark the area in the buffer as occupied (but don't write the escape sequence to buffer)
         if area.width > 0 && area.height > 0 {
-            buf[(area.left(), area.top())]
-                .set_symbol(&full_sequence);
+            // Use a placeholder character to mark the area as used
+            buf[(area.left(), area.top())].set_symbol(" ");
 
             // Mark other cells as skipped to prevent overwrites
             for y in 0..area.height.min(self.rect.height) {
