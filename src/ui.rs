@@ -188,6 +188,18 @@ impl UIRenderer {
                 f.render_widget(preview_paragraph, area);
             }
             Some(PreviewContent::Graphical(graphical)) => {
+                // Clear any text content before rendering graphics
+                // Since graphics write directly to stdout, ratatui's Clear widget isn't sufficient
+                use std::io::Write;
+
+                // Clear the entire preview area by writing spaces
+                // This removes any lingering text/ASCII art from previous renders
+                for y in area.y..area.y + area.height {
+                    let clear_line = format!("\x1b[{};{}H{}", y + 1, area.x + 1, " ".repeat(area.width as usize));
+                    let _ = std::io::stdout().write_all(clear_line.as_bytes());
+                }
+                let _ = std::io::stdout().flush();
+
                 let preview_block = Block::default()
                     .title(format!("🖼️ {}", localization.get("image_preview")))
                     .borders(Borders::ALL);
@@ -204,18 +216,28 @@ impl UIRenderer {
                 };
 
                 // Use the cached protocol - no recreation needed!
-                let mut graphical_borrow = graphical.borrow_mut();
+                let graphical_borrow = graphical.borrow();
 
-                eprintln!("[UI] Rendering graphical preview in area: {}x{} cells (image: {}x{}px)",
-                    inner_area.width, inner_area.height,
-                    graphical_borrow.img_width, graphical_borrow.img_height);
+                // Calculate centered area for the image
+                let centered_area = Self::calculate_centered_image_area(
+                    inner_area,
+                    graphical_borrow.img_width,
+                    graphical_borrow.img_height,
+                );
+
+                drop(graphical_borrow);
+                let mut graphical_borrow_mut = graphical.borrow_mut();
+
+                eprintln!("[UI] Rendering graphical preview in centered area: {}x{} cells (image: {}x{}px)",
+                    centered_area.width, centered_area.height,
+                    graphical_borrow_mut.img_width, graphical_borrow_mut.img_height);
 
                 // Use Fit with Nearest filter for fast scaling
                 use image::imageops::FilterType;
                 use std::time::Instant;
                 let widget_start = Instant::now();
                 let image_widget = StatefulImage::new(None).resize(Resize::Fit(Some(FilterType::Nearest)));
-                f.render_stateful_widget(image_widget, inner_area, &mut graphical_borrow.protocol);
+                f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow_mut.protocol);
                 eprintln!("[UI] render_stateful_widget took: {:?}", widget_start.elapsed());
             }
             None => {
@@ -322,13 +344,31 @@ impl UIRenderer {
                 f.render_widget(image_paragraph, chunks[0]);
             }
             Some(PreviewContent::Graphical(graphical)) => {
+                // Clear any text content before rendering graphics
+                use std::io::Write;
+                for y in chunks[0].y..chunks[0].y + chunks[0].height {
+                    let clear_line = format!("\x1b[{};{}H{}", y + 1, chunks[0].x + 1, " ".repeat(chunks[0].width as usize));
+                    let _ = std::io::stdout().write_all(clear_line.as_bytes());
+                }
+                let _ = std::io::stdout().flush();
+
                 // Use the cached protocol - no recreation needed!
-                let mut graphical_borrow = graphical.borrow_mut();
+                let graphical_borrow = graphical.borrow();
+
+                // Calculate centered area for the image in fullscreen
+                let centered_area = Self::calculate_centered_image_area(
+                    chunks[0],
+                    graphical_borrow.img_width,
+                    graphical_borrow.img_height,
+                );
+
+                drop(graphical_borrow);
+                let mut graphical_borrow_mut = graphical.borrow_mut();
 
                 // Use Fit with Nearest filter for fast scaling
                 use image::imageops::FilterType;
                 let image_widget = StatefulImage::new(None).resize(Resize::Fit(Some(FilterType::Nearest)));
-                f.render_stateful_widget(image_widget, chunks[0], &mut graphical_borrow.protocol);
+                f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow_mut.protocol);
             }
             None => {
                 let content = Text::from(localization.get("no_file_selected"));
@@ -405,7 +445,6 @@ impl UIRenderer {
     }
 
     /// Calculate a horizontally-centered area for an image based on its aspect ratio
-    #[allow(dead_code)]
     fn calculate_centered_image_area(area: Rect, img_width: u32, img_height: u32) -> Rect {
         if img_width == 0 || img_height == 0 {
             return area;
