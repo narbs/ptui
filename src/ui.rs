@@ -241,16 +241,22 @@ impl UIRenderer {
                         height,
                     }
                 } else {
-                    // Kitty: Use aspect ratio compensation
-                    let centered = Self::calculate_centered_image_area(
+                    // Kitty/Ghostty: Use actual font metrics for aspect ratio compensation
+                    let font_width = graphical_borrow.font_size.0 as f32;
+                    let font_height = graphical_borrow.font_size.1 as f32;
+                    let char_aspect = if font_width > 0.0 { font_height / font_width } else { 2.0 };
+
+                    let centered = Self::calculate_centered_image_area_with_aspect(
                         inner_area,
                         graphical_borrow.img_width,
                         graphical_borrow.img_height,
+                        char_aspect,
                     );
                     #[cfg(not(test))]
-                    eprintln!("[UI] Kitty: Image {}x{}px, Area {}x{} cells, Centered {}x{} cells",
+                    eprintln!("[UI] Kitty: Image {}x{}px, Area {}x{} cells, Font {}x{}px (aspect {:.2}), Centered {}x{} cells",
                         graphical_borrow.img_width, graphical_borrow.img_height,
                         inner_area.width, inner_area.height,
+                        font_width, font_height, char_aspect,
                         centered.width, centered.height);
                     centered
                 };
@@ -389,11 +395,16 @@ impl UIRenderer {
                         height,
                     }
                 } else {
-                    // Kitty: Use aspect ratio compensation
-                    Self::calculate_centered_image_area(
+                    // Kitty/Ghostty: Use actual font metrics for aspect ratio compensation
+                    let font_width = graphical_borrow.font_size.0 as f32;
+                    let font_height = graphical_borrow.font_size.1 as f32;
+                    let char_aspect = if font_width > 0.0 { font_height / font_width } else { 2.0 };
+
+                    Self::calculate_centered_image_area_with_aspect(
                         chunks[0],
                         graphical_borrow.img_width,
                         graphical_borrow.img_height,
+                        char_aspect,
                     )
                 };
 
@@ -475,15 +486,10 @@ impl UIRenderer {
     }
 
     /// Calculate a horizontally-centered area for an image based on its aspect ratio
-    fn calculate_centered_image_area(area: Rect, img_width: u32, img_height: u32) -> Rect {
+    fn calculate_centered_image_area_with_aspect(area: Rect, img_width: u32, img_height: u32, char_aspect: f32) -> Rect {
         if img_width == 0 || img_height == 0 {
             return area;
         }
-
-        // Character cell aspect ratio approximation
-        // Terminal characters are typically ~2:1 (height:width) in pixel dimensions
-        // So 1 row of chars = 2 columns worth of pixels
-        let char_aspect = 2.0;
 
         // Calculate image aspect ratio
         let img_aspect = img_width as f32 / img_height as f32;

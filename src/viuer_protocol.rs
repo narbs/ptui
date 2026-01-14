@@ -25,15 +25,17 @@ pub struct ViuerKittyProtocol {
     unique_id: u8,
     /// Maximum dimension for downscaling (configurable)
     max_dimension: u32,
+    /// Character cell aspect ratio (height/width) for proper image fitting
+    char_aspect_ratio: f32,
 }
 
 impl ViuerKittyProtocol {
     #[allow(dead_code)]
     pub fn new(image: DynamicImage, unique_id: u8) -> Self {
-        Self::new_with_config(image, unique_id, 1024)
+        Self::new_with_config(image, unique_id, 1024, 2.0)
     }
 
-    pub fn new_with_config(image: DynamicImage, unique_id: u8, max_dimension: u32) -> Self {
+    pub fn new_with_config(image: DynamicImage, unique_id: u8, max_dimension: u32, char_aspect_ratio: f32) -> Self {
         Self {
             image,
             escape_sequence: String::new(),
@@ -41,6 +43,7 @@ impl ViuerKittyProtocol {
             needs_retransmit: true,
             unique_id,
             max_dimension,
+            char_aspect_ratio,
         }
     }
 
@@ -97,9 +100,8 @@ impl ViuerKittyProtocol {
             return (0, 0);
         }
 
-        // Terminal cells are roughly 2:1 aspect ratio (height:width)
-        // So we need to account for this when fitting images
-        let char_aspect_ratio = 2.0;
+        // Use the actual character cell aspect ratio from terminal font metrics
+        let char_aspect_ratio = self.char_aspect_ratio;
 
         let available_width = area.width as f32;
         let available_height = area.height as f32 * char_aspect_ratio;

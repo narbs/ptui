@@ -318,7 +318,11 @@ impl PreviewManager {
                         TerminalGraphicsSupport::Kitty => {
                             #[cfg(not(test))]
                             eprintln!("[PROTOCOL] Using Kitty protocol");
-                            Box::new(ViuerKittyProtocol::new_with_config(img, unique_id, self.graphical_max_dimension))
+                            // Calculate actual character aspect ratio from font metrics
+                            let font_width = self.font_size.0 as f32;
+                            let font_height = self.font_size.1 as f32;
+                            let char_aspect = if font_width > 0.0 { font_height / font_width } else { 2.0 };
+                            Box::new(ViuerKittyProtocol::new_with_config(img, unique_id, self.graphical_max_dimension, char_aspect))
                         }
                         TerminalGraphicsSupport::Iterm2 => {
                             #[cfg(not(test))]
