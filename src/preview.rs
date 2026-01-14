@@ -284,7 +284,52 @@ impl PreviewManager {
                             eprintln!("[PROTOCOL] Using iTerm2 protocol via ratatui-image");
                             // Use ratatui-image's iTerm2 protocol
                             if let Some(ref mut picker) = self.picker {
-                                picker.new_resize_protocol(img)
+                                // For iTerm2, we need to resize the image to match the display area
+                                // Calculate target pixel dimensions based on terminal cells and font size
+                                let font_width = picker.font_size.0 as u32;
+                                let font_height = picker.font_size.1 as u32;
+
+                                // Get terminal dimensions
+                                let (term_cols, term_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+
+                                // Preview area is roughly 75% width, 85% height
+                                let preview_cols = ((term_cols as f32) * 0.75) as u32;
+                                let preview_rows = ((term_rows as f32) * 0.85) as u32;
+
+                                // Calculate pixel dimensions
+                                let target_width_px = preview_cols * font_width;
+                                let target_height_px = preview_rows * font_height;
+
+                                eprintln!("[ITERM2] Terminal: {}x{} cells, Font: {}x{}px", term_cols, term_rows, font_width, font_height);
+                                eprintln!("[ITERM2] Preview area: {}x{} cells = {}x{}px", preview_cols, preview_rows, target_width_px, target_height_px);
+                                eprintln!("[ITERM2] Original image: {}x{}px", img_w, img_h);
+
+                                // Resize image to fit the display area while maintaining aspect ratio
+                                let img_aspect = img_w as f32 / img_h as f32;
+                                let target_aspect = target_width_px as f32 / target_height_px as f32;
+
+                                let (resize_width, resize_height) = if img_aspect > target_aspect {
+                                    // Image is wider - fit to width
+                                    let w = target_width_px;
+                                    let h = (w as f32 / img_aspect) as u32;
+                                    (w, h.min(target_height_px))
+                                } else {
+                                    // Image is taller - fit to height
+                                    let h = target_height_px;
+                                    let w = (h as f32 * img_aspect) as u32;
+                                    (w.min(target_width_px), h)
+                                };
+
+                                eprintln!("[ITERM2] Resizing image to: {}x{}px", resize_width, resize_height);
+
+                                // Resize the image
+                                let resized_img = img.resize_exact(
+                                    resize_width,
+                                    resize_height,
+                                    image::imageops::FilterType::Lanczos3 // Use high-quality filter for iTerm2
+                                );
+
+                                picker.new_resize_protocol(resized_img)
                             } else {
                                 eprintln!("[PROTOCOL] No picker available, falling back to text");
                                 // Fallback to text mode
