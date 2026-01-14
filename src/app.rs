@@ -969,16 +969,20 @@ impl ChafaTui {
     /// Clear Kitty graphics protocol images from the terminal
     /// This should be called when switching from graphical to text mode
     pub fn clear_graphics_if_needed(&self) {
-        // Check if current preview is text-based (not graphical)
-        let is_current_graphical = matches!(&self.preview_content, Some(PreviewContent::Graphical(_)));
-
         // If we're not showing graphical content, clear any lingering images
-        if !is_current_graphical {
-            use std::io::Write;
-            // Send Kitty protocol command to delete all images
-            let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
-            let _ = std::io::stdout().write_all(delete_all_cmd.as_bytes());
-            let _ = std::io::stdout().flush();
+        // Only do this in non-test environments to avoid interfering with test output
+        #[cfg(not(test))]
+        {
+            // Check if current preview is text-based (not graphical)
+            let is_current_graphical = matches!(&self.preview_content, Some(PreviewContent::Graphical(_)));
+
+            if !is_current_graphical {
+                use std::io::Write;
+                // Send Kitty protocol command to delete all images
+                let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
+                let _ = std::io::stdout().write_all(delete_all_cmd.as_bytes());
+                let _ = std::io::stdout().flush();
+            }
         }
     }
 }

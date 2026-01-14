@@ -6,7 +6,9 @@ pub struct FastImageLoader;
 impl FastImageLoader {
     /// Load image with optimal strategy based on format and target size
     pub fn load_for_display(path: &str, target_max_dimension: u32) -> Result<DynamicImage, String> {
+        #[cfg(not(test))]
         use std::time::Instant;
+        #[cfg(not(test))]
         let load_start = Instant::now();
 
         // Detect format by extension
@@ -22,6 +24,7 @@ impl FastImageLoader {
             {
                 Self::load_jpeg_turbojpeg(path, target_max_dimension)
                     .or_else(|e| {
+                        #[cfg(not(test))]
                         eprintln!("[TURBOJPEG] Failed: {}, falling back to zune-jpeg", e);
                         Self::load_jpeg_zune(path, target_max_dimension)
                     })
@@ -35,6 +38,7 @@ impl FastImageLoader {
             Self::load_with_image_crate(path)
         };
 
+        #[cfg(not(test))]
         match &result {
             Ok(img) => {
                 let decoder_name = if is_jpeg {
@@ -90,6 +94,7 @@ impl FastImageLoader {
             ScalingFactor::ONE  // Full size
         };
 
+        #[cfg(not(test))]
         eprintln!("[TURBOJPEG] Original: {}x{}, Target: {}, Scale: {:?}",
             original_width, original_height, target_max_dimension, scaling_factor);
 
@@ -102,6 +107,7 @@ impl FastImageLoader {
         let output_width = scaled_header.width;
         let output_height = scaled_header.height;
 
+        #[cfg(not(test))]
         eprintln!("[TURBOJPEG] Scaled dimensions: {}x{}", output_width, output_height);
 
         // Allocate output buffer for scaled image
@@ -121,6 +127,7 @@ impl FastImageLoader {
         decompressor.decompress(&buffer, output_image.as_deref_mut())
             .map_err(|e| format!("JPEG decompression failed: {:?}", e))?;
 
+        #[cfg(not(test))]
         eprintln!("[TURBOJPEG] Successfully decoded at: {}x{}", output_width, output_height);
 
         // Convert to DynamicImage
@@ -158,6 +165,7 @@ impl FastImageLoader {
         let width = info.width as u32;
         let height = info.height as u32;
 
+        #[cfg(not(test))]
         eprintln!("[ZUNE-JPEG] Decoded: {}x{}", width, height);
 
         // Convert to DynamicImage

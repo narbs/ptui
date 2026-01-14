@@ -156,6 +156,7 @@ impl PTuiConfig {
                     // Save updated config to migrate to new format
                     let _ = Self::save_config(&config_path, &config);
                 }
+                #[cfg(not(test))]
                 println!("Loaded config from: {:?}", config_path);
                 return Ok(config);
             }
@@ -168,8 +169,9 @@ impl PTuiConfig {
         fs::create_dir_all(config_path.parent().unwrap())?;
         let default_config = Self::default();
         Self::save_config(config_path, &default_config)?;
+        #[cfg(not(test))]
         println!("Created default config file: {:?}", config_path);
-        
+
         Ok(default_config)
     }
 

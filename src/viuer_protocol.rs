@@ -142,13 +142,15 @@ impl StatefulProtocol for ViuerKittyProtocol {
     }
 
     fn resize_encode(&mut self, _resize: &Resize, _background_color: Option<Rgb<u8>>, area: Rect) {
-        use std::time::Instant;
-
         if area.width == 0 || area.height == 0 {
             return;
         }
 
+        #[cfg(not(test))]
+        use std::time::Instant;
+        #[cfg(not(test))]
         let total_start = Instant::now();
+
         let (width, height) = self.calculate_dimensions(area);
 
         // Downscaling based on config (default 768px for fast encoding)
@@ -161,9 +163,11 @@ impl StatefulProtocol for ViuerKittyProtocol {
             let new_width = (self.image.width() as f32 * scale) as u32;
             let new_height = (self.image.height() as f32 * scale) as u32;
 
+            #[cfg(not(test))]
             let resize_start = Instant::now();
             // Use fastest filter - Nearest is 10x faster than Triangle/Lanczos
             let resized = self.image.resize_exact(new_width, new_height, image::imageops::FilterType::Nearest);
+            #[cfg(not(test))]
             eprintln!("[TIMING] Resize {}x{} -> {}x{}: {:?}",
                 self.image.width(), self.image.height(), new_width, new_height, resize_start.elapsed());
             resized
@@ -171,8 +175,10 @@ impl StatefulProtocol for ViuerKittyProtocol {
             self.image.clone()
         };
 
+        #[cfg(not(test))]
         let encode_start = Instant::now();
         self.escape_sequence = self.encode_image(&img_to_encode, width, height);
+        #[cfg(not(test))]
         eprintln!("[TIMING] Base64 encode ({}x{} = {}MB): {:?}",
             img_to_encode.width(), img_to_encode.height(),
             (img_to_encode.width() * img_to_encode.height() * 4) / 1_000_000,
@@ -181,6 +187,7 @@ impl StatefulProtocol for ViuerKittyProtocol {
         self.rect = Rect::new(0, 0, width, height);
         self.needs_retransmit = false;
 
+        #[cfg(not(test))]
         eprintln!("[TIMING] resize_encode TOTAL: {:?}", total_start.elapsed());
     }
 
@@ -191,17 +198,21 @@ impl StatefulProtocol for ViuerKittyProtocol {
 
         // Clear the terminal screen area directly to prevent text ghosting
         // We need to write directly to stdout because previous text frames are already on the terminal
-        use std::io::Write;
-        let mut clear_area = String::new();
-        for row in 0..area.height {
-            // Position cursor at the start of each row in the preview area
-            let position = format!("\x1b[{};{}H", area.top() + row + 1, area.left() + 1);
-            clear_area.push_str(&position);
-            // Clear to end of line (or write spaces for exact width)
-            clear_area.push_str(&" ".repeat(area.width as usize));
+        // Only do this in non-test environments to avoid interfering with test output
+        #[cfg(not(test))]
+        {
+            use std::io::Write;
+            let mut clear_area = String::new();
+            for row in 0..area.height {
+                // Position cursor at the start of each row in the preview area
+                let position = format!("\x1b[{};{}H", area.top() + row + 1, area.left() + 1);
+                clear_area.push_str(&position);
+                // Clear to end of line (or write spaces for exact width)
+                clear_area.push_str(&" ".repeat(area.width as usize));
+            }
+            let _ = std::io::stdout().write_all(clear_area.as_bytes());
+            let _ = std::io::stdout().flush();
         }
-        let _ = std::io::stdout().write_all(clear_area.as_bytes());
-        let _ = std::io::stdout().flush();
 
         // First, clear all cells in the buffer to prevent text ghosting
         // This ensures old text content doesn't show through

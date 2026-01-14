@@ -17,6 +17,7 @@ use ratatui_image::protocol::StatefulProtocol;
 use ratatui_image::picker::Picker;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(test, allow(dead_code))]
 pub enum TerminalGraphicsSupport {
     Kitty,
     Iterm2,
@@ -65,6 +66,7 @@ impl PreviewManager {
         // Detect terminal graphics capabilities
         let (graphics_support, picker) = Self::detect_graphics_support();
 
+        #[cfg(not(test))]
         eprintln!("[GRAPHICS] Terminal graphics support detected: {:?}", graphics_support);
 
         // Cache font size for later use
@@ -72,6 +74,7 @@ impl PreviewManager {
             .map(|p| p.font_size)
             .unwrap_or((14, 28)); // Default fallback
 
+        #[cfg(not(test))]
         eprintln!("[GRAPHICS] Font size: {}x{} pixels", font_size.0, font_size.1);
 
         Self {
@@ -91,47 +94,56 @@ impl PreviewManager {
 
     /// Detect what graphics protocols the terminal supports
     fn detect_graphics_support() -> (TerminalGraphicsSupport, Option<Picker>) {
-        // Try to create a picker and detect protocol
-        match Picker::from_termios() {
-            Ok(mut picker) => {
-                picker.guess_protocol();
+        // Skip graphics detection during tests to avoid terminal access issues
+        #[cfg(test)]
+        {
+            return (TerminalGraphicsSupport::None, None);
+        }
 
-                // Check what protocol was detected
-                // The picker stores the detected protocol internally
-                eprintln!("[GRAPHICS] Picker created successfully");
-                eprintln!("[GRAPHICS] Font size: {}x{}", picker.font_size.0, picker.font_size.1);
+        #[cfg(not(test))]
+        {
+            // Try to create a picker and detect protocol
+            match Picker::from_termios() {
+                Ok(mut picker) => {
+                    picker.guess_protocol();
 
-                // Check environment variables and protocol detection
-                let term = std::env::var("TERM").unwrap_or_default();
-                let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
+                    // Check what protocol was detected
+                    // The picker stores the detected protocol internally
+                    eprintln!("[GRAPHICS] Picker created successfully");
+                    eprintln!("[GRAPHICS] Font size: {}x{}", picker.font_size.0, picker.font_size.1);
 
-                eprintln!("[GRAPHICS] TERM={}", term);
-                eprintln!("[GRAPHICS] TERM_PROGRAM={}", term_program);
+                    // Check environment variables and protocol detection
+                    let term = std::env::var("TERM").unwrap_or_default();
+                    let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
 
-                // Determine support based on terminal type
-                // Kitty protocol is supported by: Kitty, Ghostty, WezTerm
-                let support = if term.contains("kitty")
-                    || term_program.contains("ghostty")
-                    || term_program.contains("WezTerm") {
-                    eprintln!("[GRAPHICS] Detected Kitty protocol support");
-                    TerminalGraphicsSupport::Kitty
-                } else if term_program.contains("iTerm") || term_program == "iTerm.app" {
-                    eprintln!("[GRAPHICS] Detected iTerm2 inline images support");
-                    TerminalGraphicsSupport::Iterm2
-                } else if term.contains("xterm") && picker.font_size != (0, 0) {
-                    // Sixel support - check if terminal might support it
-                    eprintln!("[GRAPHICS] Possible Sixel support, but falling back to text for now");
-                    TerminalGraphicsSupport::None
-                } else {
-                    eprintln!("[GRAPHICS] No graphics protocol detected, using text mode");
-                    TerminalGraphicsSupport::None
-                };
+                    eprintln!("[GRAPHICS] TERM={}", term);
+                    eprintln!("[GRAPHICS] TERM_PROGRAM={}", term_program);
 
-                (support, Some(picker))
-            }
-            Err(e) => {
-                eprintln!("[GRAPHICS] Failed to create picker: {}, falling back to text mode", e);
-                (TerminalGraphicsSupport::None, None)
+                    // Determine support based on terminal type
+                    // Kitty protocol is supported by: Kitty, Ghostty, WezTerm
+                    let support = if term.contains("kitty")
+                        || term_program.contains("ghostty")
+                        || term_program.contains("WezTerm") {
+                        eprintln!("[GRAPHICS] Detected Kitty protocol support");
+                        TerminalGraphicsSupport::Kitty
+                    } else if term_program.contains("iTerm") || term_program == "iTerm.app" {
+                        eprintln!("[GRAPHICS] Detected iTerm2 inline images support");
+                        TerminalGraphicsSupport::Iterm2
+                    } else if term.contains("xterm") && picker.font_size != (0, 0) {
+                        // Sixel support - check if terminal might support it
+                        eprintln!("[GRAPHICS] Possible Sixel support, but falling back to text for now");
+                        TerminalGraphicsSupport::None
+                    } else {
+                        eprintln!("[GRAPHICS] No graphics protocol detected, using text mode");
+                        TerminalGraphicsSupport::None
+                    };
+
+                    (support, Some(picker))
+                }
+                Err(e) => {
+                    eprintln!("[GRAPHICS] Failed to create picker: {}, falling back to text mode", e);
+                    (TerminalGraphicsSupport::None, None)
+                }
             }
         }
     }
@@ -142,7 +154,11 @@ impl PreviewManager {
             return config.converter.graphical.max_dimension;
         }
 
-        // Get terminal size in characters
+        // Get terminal size in characters (use fallback during tests)
+        #[cfg(test)]
+        let (term_cols, term_rows) = (80, 24);
+
+        #[cfg(not(test))]
         let (term_cols, term_rows) = crossterm::terminal::size().unwrap_or((80, 24));
 
         // Conservative font size estimate (optimized for speed)
@@ -167,6 +183,7 @@ impl PreviewManager {
         // - 512: Maximum for <1s performance
         let capped = optimal.clamp(512, 1024);
 
+        #[cfg(not(test))]
         eprintln!("[AUTO-RESIZE] Terminal: {}x{} chars, Display: ~{}x{}px, Optimal: {} (capped: {})",
             term_cols, term_rows, display_width, display_height, optimal, capped);
 
@@ -266,19 +283,25 @@ impl PreviewManager {
         // Check if converter is graphical AND terminal supports graphics
         let result = if self.converter.is_graphical() && self.graphics_support != TerminalGraphicsSupport::None {
             // Use graphical protocol based on terminal capabilities
+            #[cfg(not(test))]
             use std::time::Instant;
+            #[cfg(not(test))]
             let total_start = Instant::now();
 
+            #[cfg(not(test))]
             let load_start = Instant::now();
             // Use fast loader with subsampling based on target dimension
             match FastImageLoader::load_for_display(path, self.graphical_max_dimension) {
                 Ok(img) => {
+                    #[cfg(not(test))]
                     let load_time = load_start.elapsed();
                     let original_w = img.width();
                     let original_h = img.height();
+                    #[cfg(not(test))]
                     eprintln!("[TIMING] Total image load ({}x{}): {:?}", original_w, original_h, load_time);
 
                     // Create protocol based on terminal support
+                    #[cfg(not(test))]
                     let protocol_start = Instant::now();
                     // Generate unique ID based on file path hash
                     use std::collections::hash_map::DefaultHasher;
@@ -293,10 +316,12 @@ impl PreviewManager {
 
                     let protocol: Box<dyn StatefulProtocol> = match self.graphics_support {
                         TerminalGraphicsSupport::Kitty => {
+                            #[cfg(not(test))]
                             eprintln!("[PROTOCOL] Using Kitty protocol");
                             Box::new(ViuerKittyProtocol::new_with_config(img, unique_id, self.graphical_max_dimension))
                         }
                         TerminalGraphicsSupport::Iterm2 => {
+                            #[cfg(not(test))]
                             eprintln!("[PROTOCOL] Using iTerm2 protocol via ratatui-image");
                             // Pre-resize image to fill the available pixel space
                             if let Some(ref mut picker) = self.picker {
@@ -307,9 +332,12 @@ impl PreviewManager {
                                 let target_width_px = converter_width as u32 * font_width;
                                 let target_height_px = converter_height as u32 * font_height;
 
-                                eprintln!("[ITERM2] Preview area: {}x{} cells = {}x{}px",
-                                    converter_width, converter_height, target_width_px, target_height_px);
-                                eprintln!("[ITERM2] Original image: {}x{}px", original_w, original_h);
+                                #[cfg(not(test))]
+                                {
+                                    eprintln!("[ITERM2] Preview area: {}x{} cells = {}x{}px",
+                                        converter_width, converter_height, target_width_px, target_height_px);
+                                    eprintln!("[ITERM2] Original image: {}x{}px", original_w, original_h);
+                                }
 
                                 // Resize image to fit the display area while maintaining aspect ratio
                                 let img_aspect = original_w as f32 / original_h as f32;
@@ -327,6 +355,7 @@ impl PreviewManager {
                                     (w.min(target_width_px), h)
                                 };
 
+                                #[cfg(not(test))]
                                 eprintln!("[ITERM2] Resizing image to: {}x{}px", resize_width, resize_height);
 
                                 // Resize the image
@@ -339,29 +368,37 @@ impl PreviewManager {
                                 // Update final dimensions to match resized image
                                 final_img_w = resize_width;
                                 final_img_h = resize_height;
+                                #[cfg(not(test))]
                                 eprintln!("[ITERM2] Final dimensions: {}x{}px", final_img_w, final_img_h);
 
                                 picker.new_resize_protocol(resized_img)
                             } else {
+                                #[cfg(not(test))]
                                 eprintln!("[PROTOCOL] No picker available, falling back to text");
                                 return PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height));
                             }
                         }
                         TerminalGraphicsSupport::Sixel => {
+                            #[cfg(not(test))]
                             eprintln!("[PROTOCOL] Using Sixel protocol (not yet implemented, falling back to text)");
                             // TODO: Implement Sixel support
                             return PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height));
                         }
                         TerminalGraphicsSupport::None => {
                             // Should not reach here due to outer if condition
+                            #[cfg(not(test))]
                             eprintln!("[PROTOCOL] No graphics support, using text");
                             return PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height));
                         }
                     };
 
+                    #[cfg(not(test))]
                     let protocol_time = protocol_start.elapsed();
-                    eprintln!("[TIMING] Protocol creation: {:?}", protocol_time);
-                    eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());
+                    #[cfg(not(test))]
+                    {
+                        eprintln!("[TIMING] Protocol creation: {:?}", protocol_time);
+                        eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());
+                    }
 
                     PreviewContent::Graphical(Rc::new(RefCell::new(GraphicalPreview {
                         path: path.to_string(),
@@ -382,6 +419,7 @@ impl PreviewManager {
             }
         } else {
             // Use text-based converter (chafa, jp2a, etc.)
+            #[cfg(not(test))]
             if self.graphics_support == TerminalGraphicsSupport::None {
                 eprintln!("[RENDER] Using text-based converter (graphics not supported)");
             }
@@ -393,6 +431,7 @@ impl PreviewManager {
             if let Some(oldest_key) = self.cache_order.first().cloned() {
                 self.cache.remove(&oldest_key);
                 self.cache_order.remove(0);
+                #[cfg(not(test))]
                 eprintln!("[CACHE] Evicted oldest entry: {}", oldest_key);
             }
         }

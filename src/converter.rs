@@ -1,6 +1,8 @@
 use crate::config::{ChafaConfig, Jp2aConfig, PTuiConfig};
 use std::process::Command;
-use ratatui_image::picker::{Picker, ProtocolType};
+#[cfg(not(test))]
+use ratatui_image::picker::Picker;
+use ratatui_image::picker::ProtocolType;
 
 pub trait AsciiConverter {
     fn convert_image(&self, path: &str, width: u16, height: u16) -> Result<String, String>;
@@ -114,24 +116,35 @@ impl AsciiConverter for Jp2aConverter {
 }
 
 pub struct GraphicalConverter {
+    #[cfg_attr(test, allow(dead_code))]
     protocol_type: ProtocolType,
     fallback_converter: Box<dyn AsciiConverter>,
 }
 
 impl GraphicalConverter {
     pub fn new(fallback_config: ChafaConfig) -> Result<Self, String> {
-        // Try protocol detection
-        let mut picker = Picker::from_termios().map_err(|e| format!("Failed to create picker: {:?}", e))?;
-        picker.guess_protocol();
-        let protocol_type = picker.protocol_type;
+        // Prevent terminal access during tests
+        #[cfg(test)]
+        {
+            let _ = fallback_config; // Suppress unused warning
+            return Err("GraphicalConverter cannot be created during tests".to_string());
+        }
 
-        // Always create fallback converter
-        let fallback_converter = Box::new(ChafaConverter::new(fallback_config));
+        #[cfg(not(test))]
+        {
+            // Try protocol detection
+            let mut picker = Picker::from_termios().map_err(|e| format!("Failed to create picker: {:?}", e))?;
+            picker.guess_protocol();
+            let protocol_type = picker.protocol_type;
 
-        Ok(Self {
-            protocol_type,
-            fallback_converter,
-        })
+            // Always create fallback converter
+            let fallback_converter = Box::new(ChafaConverter::new(fallback_config));
+
+            Ok(Self {
+                protocol_type,
+                fallback_converter,
+            })
+        }
     }
 
     #[allow(dead_code)]
@@ -140,6 +153,7 @@ impl GraphicalConverter {
         true
     }
 
+    #[cfg_attr(test, allow(dead_code))]
     pub fn get_protocol_type(&self) -> &ProtocolType {
         &self.protocol_type
     }
@@ -171,11 +185,15 @@ pub fn create_converter(config: &PTuiConfig) -> Box<dyn AsciiConverter> {
         "graphical" => {
             match GraphicalConverter::new(config.converter.chafa.clone()) {
                 Ok(converter) => {
+                    #[cfg(not(test))]
                     eprintln!("Using graphical mode with protocol: {:?}", converter.get_protocol_type());
                     Box::new(converter)
                 }
                 Err(e) => {
+                    #[cfg(not(test))]
                     eprintln!("Failed to initialize graphical mode: {}. Falling back to chafa.", e);
+                    #[cfg(test)]
+                    let _ = e; // Suppress unused warning in tests
                     Box::new(ChafaConverter::new(config.converter.chafa.clone()))
                 }
             }

@@ -208,6 +208,7 @@ impl UIRenderer {
 
                 // Calculate centered area
                 use crate::preview::TerminalGraphicsSupport;
+                #[cfg(not(test))]
                 eprintln!("[UI] Protocol type: {:?}", graphical_borrow.protocol_type);
 
                 let centered_area = if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
@@ -227,6 +228,7 @@ impl UIRenderer {
                     let x_offset = (inner_area.width.saturating_sub(width)) / 2;
                     let y_offset = (inner_area.height.saturating_sub(height)) / 2;
 
+                    #[cfg(not(test))]
                     eprintln!("[UI] iTerm2: Image {}x{}px, Font {}x{}px, Needs {}x{} cells, Centered at +{}+{}",
                         graphical_borrow.img_width, graphical_borrow.img_height,
                         font_width, font_height,
@@ -245,6 +247,7 @@ impl UIRenderer {
                         graphical_borrow.img_width,
                         graphical_borrow.img_height,
                     );
+                    #[cfg(not(test))]
                     eprintln!("[UI] Kitty: Image {}x{}px, Area {}x{} cells, Centered {}x{} cells",
                         graphical_borrow.img_width, graphical_borrow.img_height,
                         inner_area.width, inner_area.height,
