@@ -206,12 +206,51 @@ impl UIRenderer {
                 // Use the cached protocol - no recreation needed!
                 let mut graphical_borrow = graphical.borrow_mut();
 
-                // Calculate centered area for the image
-                let centered_area = Self::calculate_centered_image_area(
-                    inner_area,
-                    graphical_borrow.img_width,
-                    graphical_borrow.img_height,
-                );
+                // Calculate centered area
+                use crate::preview::TerminalGraphicsSupport;
+                eprintln!("[UI] Protocol type: {:?}", graphical_borrow.protocol_type);
+
+                let centered_area = if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
+                    // iTerm2: Calculate exact cell dimensions based on pixel size and font size
+                    let font_width = graphical_borrow.font_size.0 as u32;
+                    let font_height = graphical_borrow.font_size.1 as u32;
+
+                    // Calculate how many cells the resized image needs
+                    let needed_width_cells = ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
+                    let needed_height_cells = ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
+
+                    // Clamp to available area
+                    let width = needed_width_cells.min(inner_area.width);
+                    let height = needed_height_cells.min(inner_area.height);
+
+                    // Center within the available area
+                    let x_offset = (inner_area.width.saturating_sub(width)) / 2;
+                    let y_offset = (inner_area.height.saturating_sub(height)) / 2;
+
+                    eprintln!("[UI] iTerm2: Image {}x{}px, Font {}x{}px, Needs {}x{} cells, Centered at +{}+{}",
+                        graphical_borrow.img_width, graphical_borrow.img_height,
+                        font_width, font_height,
+                        width, height, x_offset, y_offset);
+
+                    Rect {
+                        x: inner_area.x + x_offset,
+                        y: inner_area.y + y_offset,
+                        width,
+                        height,
+                    }
+                } else {
+                    // Kitty: Use aspect ratio compensation
+                    let centered = Self::calculate_centered_image_area(
+                        inner_area,
+                        graphical_borrow.img_width,
+                        graphical_borrow.img_height,
+                    );
+                    eprintln!("[UI] Kitty: Image {}x{}px, Area {}x{} cells, Centered {}x{} cells",
+                        graphical_borrow.img_width, graphical_borrow.img_height,
+                        inner_area.width, inner_area.height,
+                        centered.width, centered.height);
+                    centered
+                };
 
                 // Use Fit to fill available space
                 let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
@@ -324,12 +363,36 @@ impl UIRenderer {
                 // Use the cached protocol - no recreation needed!
                 let mut graphical_borrow = graphical.borrow_mut();
 
-                // Calculate centered area for the image
-                let centered_area = Self::calculate_centered_image_area(
-                    chunks[0],
-                    graphical_borrow.img_width,
-                    graphical_borrow.img_height,
-                );
+                // Calculate centered area
+                use crate::preview::TerminalGraphicsSupport;
+                let centered_area = if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
+                    // iTerm2: Calculate exact cell dimensions
+                    let font_width = graphical_borrow.font_size.0 as u32;
+                    let font_height = graphical_borrow.font_size.1 as u32;
+
+                    let needed_width_cells = ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
+                    let needed_height_cells = ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
+
+                    let width = needed_width_cells.min(chunks[0].width);
+                    let height = needed_height_cells.min(chunks[0].height);
+
+                    let x_offset = (chunks[0].width.saturating_sub(width)) / 2;
+                    let y_offset = (chunks[0].height.saturating_sub(height)) / 2;
+
+                    Rect {
+                        x: chunks[0].x + x_offset,
+                        y: chunks[0].y + y_offset,
+                        width,
+                        height,
+                    }
+                } else {
+                    // Kitty: Use aspect ratio compensation
+                    Self::calculate_centered_image_area(
+                        chunks[0],
+                        graphical_borrow.img_width,
+                        graphical_borrow.img_height,
+                    )
+                };
 
                 let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
                 f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow.protocol);

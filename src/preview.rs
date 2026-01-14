@@ -41,6 +41,8 @@ pub struct GraphicalPreview {
     pub img_width: u32,  // Actual image pixel width
     pub img_height: u32, // Actual image pixel height
     pub protocol: Box<dyn StatefulProtocol>,
+    pub protocol_type: TerminalGraphicsSupport, // Track which protocol is being used
+    pub font_size: (u16, u16), // Font size for iTerm2 cell calculations
 }
 
 pub struct PreviewManager {
@@ -52,6 +54,7 @@ pub struct PreviewManager {
     pub debug_info: String,
     graphics_support: TerminalGraphicsSupport,
     picker: Option<Picker>, // For creating terminal-specific image protocols
+    font_size: (u16, u16), // Cached font size (width, height) in pixels
 }
 
 impl PreviewManager {
@@ -64,6 +67,13 @@ impl PreviewManager {
 
         eprintln!("[GRAPHICS] Terminal graphics support detected: {:?}", graphics_support);
 
+        // Cache font size for later use
+        let font_size = picker.as_ref()
+            .map(|p| p.font_size)
+            .unwrap_or((14, 28)); // Default fallback
+
+        eprintln!("[GRAPHICS] Font size: {}x{} pixels", font_size.0, font_size.1);
+
         Self {
             cache: HashMap::new(),
             cache_order: Vec::new(),
@@ -75,6 +85,7 @@ impl PreviewManager {
             debug_info: String::new(),
             graphics_support,
             picker,
+            font_size,
         }
     }
 
@@ -263,8 +274,9 @@ impl PreviewManager {
             match FastImageLoader::load_for_display(path, self.graphical_max_dimension) {
                 Ok(img) => {
                     let load_time = load_start.elapsed();
-                    let (img_w, img_h) = (img.width(), img.height());
-                    eprintln!("[TIMING] Total image load ({}x{}): {:?}", img_w, img_h, load_time);
+                    let original_w = img.width();
+                    let original_h = img.height();
+                    eprintln!("[TIMING] Total image load ({}x{}): {:?}", original_w, original_h, load_time);
 
                     // Create protocol based on terminal support
                     let protocol_start = Instant::now();
@@ -275,6 +287,10 @@ impl PreviewManager {
                     path.hash(&mut hasher);
                     let unique_id = (hasher.finish() % 255) as u8;
 
+                    // Track final image dimensions (may differ for iTerm2 if resized)
+                    let mut final_img_w = original_w;
+                    let mut final_img_h = original_h;
+
                     let protocol: Box<dyn StatefulProtocol> = match self.graphics_support {
                         TerminalGraphicsSupport::Kitty => {
                             eprintln!("[PROTOCOL] Using Kitty protocol");
@@ -282,30 +298,21 @@ impl PreviewManager {
                         }
                         TerminalGraphicsSupport::Iterm2 => {
                             eprintln!("[PROTOCOL] Using iTerm2 protocol via ratatui-image");
-                            // Use ratatui-image's iTerm2 protocol
+                            // Pre-resize image to fill the available pixel space
                             if let Some(ref mut picker) = self.picker {
-                                // For iTerm2, we need to resize the image to match the display area
-                                // Calculate target pixel dimensions based on terminal cells and font size
                                 let font_width = picker.font_size.0 as u32;
                                 let font_height = picker.font_size.1 as u32;
 
-                                // Get terminal dimensions
-                                let (term_cols, term_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+                                // Use converter_width/height (the preview area dimensions in cells)
+                                let target_width_px = converter_width as u32 * font_width;
+                                let target_height_px = converter_height as u32 * font_height;
 
-                                // Preview area is roughly 75% width, 85% height
-                                let preview_cols = ((term_cols as f32) * 0.75) as u32;
-                                let preview_rows = ((term_rows as f32) * 0.85) as u32;
-
-                                // Calculate pixel dimensions
-                                let target_width_px = preview_cols * font_width;
-                                let target_height_px = preview_rows * font_height;
-
-                                eprintln!("[ITERM2] Terminal: {}x{} cells, Font: {}x{}px", term_cols, term_rows, font_width, font_height);
-                                eprintln!("[ITERM2] Preview area: {}x{} cells = {}x{}px", preview_cols, preview_rows, target_width_px, target_height_px);
-                                eprintln!("[ITERM2] Original image: {}x{}px", img_w, img_h);
+                                eprintln!("[ITERM2] Preview area: {}x{} cells = {}x{}px",
+                                    converter_width, converter_height, target_width_px, target_height_px);
+                                eprintln!("[ITERM2] Original image: {}x{}px", original_w, original_h);
 
                                 // Resize image to fit the display area while maintaining aspect ratio
-                                let img_aspect = img_w as f32 / img_h as f32;
+                                let img_aspect = original_w as f32 / original_h as f32;
                                 let target_aspect = target_width_px as f32 / target_height_px as f32;
 
                                 let (resize_width, resize_height) = if img_aspect > target_aspect {
@@ -326,13 +333,17 @@ impl PreviewManager {
                                 let resized_img = img.resize_exact(
                                     resize_width,
                                     resize_height,
-                                    image::imageops::FilterType::Lanczos3 // Use high-quality filter for iTerm2
+                                    image::imageops::FilterType::Lanczos3
                                 );
+
+                                // Update final dimensions to match resized image
+                                final_img_w = resize_width;
+                                final_img_h = resize_height;
+                                eprintln!("[ITERM2] Final dimensions: {}x{}px", final_img_w, final_img_h);
 
                                 picker.new_resize_protocol(resized_img)
                             } else {
                                 eprintln!("[PROTOCOL] No picker available, falling back to text");
-                                // Fallback to text mode
                                 return PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height));
                             }
                         }
@@ -356,9 +367,11 @@ impl PreviewManager {
                         path: path.to_string(),
                         width: converter_width,
                         height: converter_height,
-                        img_width: img_w,
-                        img_height: img_h,
+                        img_width: final_img_w,
+                        img_height: final_img_h,
                         protocol,
+                        protocol_type: self.graphics_support,
+                        font_size: self.font_size,
                     })))
                 }
                 Err(e) => {
