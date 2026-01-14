@@ -189,6 +189,28 @@ impl StatefulProtocol for ViuerKittyProtocol {
             return;
         }
 
+        // Clear the terminal screen area directly to prevent text ghosting
+        // We need to write directly to stdout because previous text frames are already on the terminal
+        use std::io::Write;
+        let mut clear_area = String::new();
+        for row in 0..area.height {
+            // Position cursor at the start of each row in the preview area
+            let position = format!("\x1b[{};{}H", area.top() + row + 1, area.left() + 1);
+            clear_area.push_str(&position);
+            // Clear to end of line (or write spaces for exact width)
+            clear_area.push_str(&" ".repeat(area.width as usize));
+        }
+        let _ = std::io::stdout().write_all(clear_area.as_bytes());
+        let _ = std::io::stdout().flush();
+
+        // First, clear all cells in the buffer to prevent text ghosting
+        // This ensures old text content doesn't show through
+        for y in 0..area.height {
+            for x in 0..area.width {
+                buf[(area.left() + x, area.top() + y)].set_symbol(" ");
+            }
+        }
+
         // Clear the screen area by deleting all images with action 'a=d,d=a' (delete all)
         // This ensures old images don't remain visible
         let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
