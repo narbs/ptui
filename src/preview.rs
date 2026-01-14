@@ -249,17 +249,11 @@ impl PreviewManager {
                     let (img_w, img_h) = (img.width(), img.height());
                     eprintln!("[TIMING] Total image load ({}x{}): {:?}", img_w, img_h, load_time);
 
-                    // Create terminal-specific protocol
+                    // Create terminal-specific protocol (iTerm2, Kitty, Sixel, etc.)
                     let protocol_start = Instant::now();
-                    if let Some(ref _picker) = self.picker {
-                        // Always use our custom ViuerKittyProtocol which has proper caching
-                        // This works for Kitty, Ghostty, WezTerm, and any Kitty-compatible terminal
-                        // The ratatui-image protocols re-encode on every frame (1000ms), ours cache (5ms)
-                        use crate::viuer_protocol::ViuerKittyProtocol;
-                        eprintln!("[PROTOCOL] Using custom ViuerKittyProtocol with caching");
-                        let protocol: Box<dyn ratatui_image::protocol::StatefulProtocol> =
-                            Box::new(ViuerKittyProtocol::new_with_config(img, 1, self.graphical_max_dimension));
-
+                    if let Some(ref picker) = self.picker {
+                        // Use ratatui-image's protocol picker for correct terminal protocol
+                        let protocol = picker.borrow_mut().new_resize_protocol(img);
                         let protocol_time = protocol_start.elapsed();
                         eprintln!("[TIMING] Protocol creation: {:?}", protocol_time);
                         eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());

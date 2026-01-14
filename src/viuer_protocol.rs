@@ -129,17 +129,16 @@ impl ViuerKittyProtocol {
 
 impl StatefulProtocol for ViuerKittyProtocol {
     fn needs_resize(&mut self, _resize: &Resize, area: Rect) -> Option<Rect> {
-        // Only encode once when first created (needs_retransmit = true)
-        // After that, always reuse the cached escape sequence
-        // This is safe because the image is cached per (path, width, height)
-        // so if dimensions change, a new protocol instance is created
         if self.needs_retransmit {
-            eprintln!("[VIUER-PROTOCOL] First render - will encode");
             return Some(area);
         }
 
-        eprintln!("[VIUER-PROTOCOL] Using cached escape sequence (no re-encode)");
-        None
+        // Check if the current rect doesn't match the area
+        if self.rect.width != area.width || self.rect.height != area.height {
+            Some(area)
+        } else {
+            None
+        }
     }
 
     fn resize_encode(&mut self, _resize: &Resize, _background_color: Option<Rgb<u8>>, area: Rect) {
@@ -152,27 +151,23 @@ impl StatefulProtocol for ViuerKittyProtocol {
         let total_start = Instant::now();
         let (width, height) = self.calculate_dimensions(area);
 
-        // Cap at 1280px for reasonable encoding+transmission time
-        // Larger images (2592px) take 2.5s: 775ms encode + 1.7s stdout write
-        // Smaller images (1280px) take ~800ms: 250ms encode + 550ms write
-        // Terminal upscaling is imperceptible, but speed gain is massive
-        let max_encode_size = 1280u32;
-        let needs_downscale = self.image.width() > max_encode_size || self.image.height() > max_encode_size;
+        // Downscaling based on config (default 768px for fast encoding)
+        // Base64 encoding is the bottleneck - smaller images = faster encoding
+        // Quality is still excellent for terminal display
+        let needs_downscale = self.image.width() > self.max_dimension || self.image.height() > self.max_dimension;
 
         let img_to_encode = if needs_downscale {
-            let scale = (max_encode_size as f32 / self.image.width().max(self.image.height()) as f32).min(1.0);
+            let scale = (self.max_dimension as f32 / self.image.width().max(self.image.height()) as f32).min(1.0);
             let new_width = (self.image.width() as f32 * scale) as u32;
             let new_height = (self.image.height() as f32 * scale) as u32;
 
             let resize_start = Instant::now();
-            // Use Nearest filter for speed (2-3x faster than Triangle)
+            // Use fastest filter - Nearest is 10x faster than Triangle/Lanczos
             let resized = self.image.resize_exact(new_width, new_height, image::imageops::FilterType::Nearest);
-            eprintln!("[VIUER-PROTOCOL] Downscaled {}x{} -> {}x{} in {:?}",
+            eprintln!("[TIMING] Resize {}x{} -> {}x{}: {:?}",
                 self.image.width(), self.image.height(), new_width, new_height, resize_start.elapsed());
             resized
         } else {
-            eprintln!("[VIUER-PROTOCOL] Encoding {}x{} directly (already ≤{}px)",
-                self.image.width(), self.image.height(), max_encode_size);
             self.image.clone()
         };
 
@@ -198,18 +193,15 @@ impl StatefulProtocol for ViuerKittyProtocol {
         // This prevents iTerm2 from misinterpreting fragmented escape sequences as terminal commands
         use std::io::Write;
 
-        // Clear all graphics immediately to prevent flashing of old content
-        // This must happen BEFORE writing the new image
+        // Clear the screen area by deleting all images with action 'a=d,d=a' (delete all)
         let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
-        let _ = std::io::stdout().write_all(delete_all_cmd.as_bytes());
-        let _ = std::io::stdout().flush();
 
         // Position cursor at the render area before writing the image sequence
         // This ensures the image appears in the correct location
         let position_cmd = format!("\x1b[{};{}H", area.top() + 1, area.left() + 1);
 
-        // Write image sequence to stdout
-        let full_sequence = format!("{}{}", position_cmd, &self.escape_sequence);
+        // Write directly to stdout: position + delete-all + image sequence
+        let full_sequence = format!("{}{}{}", position_cmd, delete_all_cmd, &self.escape_sequence);
         let _ = std::io::stdout().write_all(full_sequence.as_bytes());
         let _ = std::io::stdout().flush();
 
