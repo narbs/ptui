@@ -80,15 +80,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         
         // Only render when state has changed
         if app.needs_redraw() {
-            use std::time::Instant;
-            let render_start = Instant::now();
-            eprintln!("[RENDER] Starting terminal.draw()");
-
             // Clear Kitty graphics if switching from graphical to text mode
             app.clear_graphics_if_needed();
-            terminal.draw(|f| app.draw(f))?;
-
-            eprintln!("[RENDER] terminal.draw() took: {:?}", render_start.elapsed());
+        terminal.draw(|f| app.draw(f))?;
         }
         
         // Handle events with timeout for slideshow

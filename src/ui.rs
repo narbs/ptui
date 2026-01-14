@@ -206,17 +206,16 @@ impl UIRenderer {
                 // Use the cached protocol - no recreation needed!
                 let mut graphical_borrow = graphical.borrow_mut();
 
-                eprintln!("[UI] Rendering graphical preview in area: {}x{} cells (image: {}x{}px)",
-                    inner_area.width, inner_area.height,
-                    graphical_borrow.img_width, graphical_borrow.img_height);
+                // Calculate centered area for the image
+                let centered_area = Self::calculate_centered_image_area(
+                    inner_area,
+                    graphical_borrow.img_width,
+                    graphical_borrow.img_height,
+                );
 
-                // Use Fit with Nearest filter for fast scaling
-                use image::imageops::FilterType;
-                use std::time::Instant;
-                let widget_start = Instant::now();
-                let image_widget = StatefulImage::new(None).resize(Resize::Fit(Some(FilterType::Nearest)));
-                f.render_stateful_widget(image_widget, inner_area, &mut graphical_borrow.protocol);
-                eprintln!("[UI] render_stateful_widget took: {:?}", widget_start.elapsed());
+                // Use Fit to fill available space
+                let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
+                f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow.protocol);
             }
             None => {
                 // Show help text with logo if available
@@ -325,10 +324,15 @@ impl UIRenderer {
                 // Use the cached protocol - no recreation needed!
                 let mut graphical_borrow = graphical.borrow_mut();
 
-                // Use Fit with Nearest filter for fast scaling
-                use image::imageops::FilterType;
-                let image_widget = StatefulImage::new(None).resize(Resize::Fit(Some(FilterType::Nearest)));
-                f.render_stateful_widget(image_widget, chunks[0], &mut graphical_borrow.protocol);
+                // Calculate centered area for the image
+                let centered_area = Self::calculate_centered_image_area(
+                    chunks[0],
+                    graphical_borrow.img_width,
+                    graphical_borrow.img_height,
+                );
+
+                let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
+                f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow.protocol);
             }
             None => {
                 let content = Text::from(localization.get("no_file_selected"));
@@ -405,7 +409,6 @@ impl UIRenderer {
     }
 
     /// Calculate a horizontally-centered area for an image based on its aspect ratio
-    #[allow(dead_code)]
     fn calculate_centered_image_area(area: Rect, img_width: u32, img_height: u32) -> Rect {
         if img_width == 0 || img_height == 0 {
             return area;
