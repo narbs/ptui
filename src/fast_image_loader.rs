@@ -80,12 +80,18 @@ impl FastImageLoader {
 
         // Calculate optimal scaling factor for turbojpeg
         // turbojpeg supports 1, 1/2, 1/4, 1/8 during decompression (INSTANT!)
-        let scaling_factor = if max_original > (target_max_dimension * 8) as usize {
-            ScalingFactor::ONE_EIGHTH  // Decode at 1/8 size
-        } else if max_original > (target_max_dimension * 4) as usize {
-            ScalingFactor::ONE_QUARTER  // Decode at 1/4 size
-        } else if max_original > (target_max_dimension * 2) as usize {
-            ScalingFactor::ONE_HALF  // Decode at 1/2 size
+        // Use aggressive thresholds to ensure scaling triggers (using integer math to avoid float precision issues)
+        // For 4032px with target 2048px: 4032*10 >= 2048*19 -> 40320 >= 38912 = true -> 1/2 scale ✓
+        let target = target_max_dimension as usize;
+        let scaling_factor = if max_original * 10 >= target * 75 {
+            // 1/8 scale when original >= target * 7.5
+            ScalingFactor::ONE_EIGHTH
+        } else if max_original * 10 >= target * 37 {
+            // 1/4 scale when original >= target * 3.7
+            ScalingFactor::ONE_QUARTER
+        } else if max_original * 10 >= target * 19 {
+            // 1/2 scale when original >= target * 1.9
+            ScalingFactor::ONE_HALF
         } else {
             ScalingFactor::ONE  // Full size
         };
@@ -179,18 +185,26 @@ mod tests {
     #[test]
     fn test_scale_factor_calculation() {
         // 4032px image, target 512px:
-        // Is 4032 > 512 * 8 (4096)? No
-        // Is 4032 > 512 * 4 (2048)? Yes -> Use 1/4 scale
-        assert_eq!(4, if 4032 > 512 * 8 { 8 } else if 4032 > 512 * 4 { 4 } else if 4032 > 512 * 2 { 2 } else { 1 });
+        // 4032*10 >= 512*75? -> 40320 >= 38400? Yes -> Use 1/8 scale
+        assert_eq!(8, if 4032*10 >= 512*75 { 8 } else if 4032*10 >= 512*37 { 4 } else if 4032*10 >= 512*19 { 2 } else { 1 });
 
         // 2048px image, target 512px:
-        // Is 2048 > 512 * 8? No
-        // Is 2048 > 512 * 4 (2048)? No (not strictly greater)
-        // Is 2048 > 512 * 2 (1024)? Yes -> Use 1/2 scale
-        assert_eq!(2, if 2048 > 512 * 8 { 8 } else if 2048 > 512 * 4 { 4 } else if 2048 > 512 * 2 { 2 } else { 1 });
+        // 2048*10 >= 512*75? -> 20480 >= 38400? No
+        // 2048*10 >= 512*37? -> 20480 >= 18944? Yes -> Use 1/4 scale
+        assert_eq!(4, if 2048*10 >= 512*75 { 8 } else if 2048*10 >= 512*37 { 4 } else if 2048*10 >= 512*19 { 2 } else { 1 });
+
+        // 4032px image, target 2048px: should use 1/2 scale (the critical fix!)
+        // 4032*10 >= 2048*75? -> 40320 >= 153600? No
+        // 4032*10 >= 2048*37? -> 40320 >= 75776? No
+        // 4032*10 >= 2048*19? -> 40320 >= 38912? Yes -> Use 1/2 scale
+        assert_eq!(2, if 4032*10 >= 2048*75 { 8 } else if 4032*10 >= 2048*37 { 4 } else if 4032*10 >= 2048*19 { 2 } else { 1 });
 
         // 5000px image, target 512px: should use 1/8
-        // Is 5000 > 512 * 8 (4096)? Yes -> Use 1/8 scale
-        assert_eq!(8, if 5000 > 512 * 8 { 8 } else if 5000 > 512 * 4 { 4 } else if 5000 > 512 * 2 { 2 } else { 1 });
+        // 5000*10 >= 512*75? -> 50000 >= 38400? Yes -> Use 1/8 scale
+        assert_eq!(8, if 5000*10 >= 512*75 { 8 } else if 5000*10 >= 512*37 { 4 } else if 5000*10 >= 512*19 { 2 } else { 1 });
+
+        // 3024px image, target 2048px: should use 1/2 scale
+        // 3024*10 >= 2048*19? -> 30240 >= 38912? No -> Use 1/1 scale (full size is fine for smaller images)
+        assert_eq!(1, if 3024*10 >= 2048*75 { 8 } else if 3024*10 >= 2048*37 { 4 } else if 3024*10 >= 2048*19 { 2 } else { 1 });
     }
 }

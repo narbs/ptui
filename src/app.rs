@@ -159,18 +159,34 @@ impl ChafaTui {
         match key.code {
             KeyCode::Char('q') | KeyCode::Esc => return Err("Quit".into()),
             KeyCode::Down | KeyCode::Char('j') => {
+                use std::time::Instant;
+                let nav_start = Instant::now();
+                eprintln!("[NAV] ↓ Arrow down pressed");
+
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.move_down();
                 self.reset_text_scroll();
+
+                let preview_start = Instant::now();
                 self.update_preview();
+                eprintln!("[NAV] update_preview() took: {:?}", preview_start.elapsed());
+                eprintln!("[NAV] TOTAL key handler: {:?}", nav_start.elapsed());
             }
             KeyCode::Up | KeyCode::Char('k') => {
+                use std::time::Instant;
+                let nav_start = Instant::now();
+                eprintln!("[NAV] ↑ Arrow up pressed");
+
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.file_browser.move_up();
                 self.reset_text_scroll();
+
+                let preview_start = Instant::now();
                 self.update_preview();
+                eprintln!("[NAV] update_preview() took: {:?}", preview_start.elapsed());
+                eprintln!("[NAV] TOTAL key handler: {:?}", nav_start.elapsed());
             }
             KeyCode::PageDown => {
                 self.show_help_on_startup = false;
@@ -883,12 +899,15 @@ impl ChafaTui {
     }
 
     pub fn draw(&mut self, f: &mut ratatui::Frame) {
+        use std::time::Instant;
+        let draw_start = Instant::now();
+
         let size = f.area();
-        
+
         // Update terminal dimensions
         self.terminal_width = size.width;
         self.terminal_height = size.height;
-        
+
         if self.is_slideshow_mode {
             // Check if we have a transition in progress
             let transition_content: Option<PreviewContent>;
@@ -916,8 +935,11 @@ impl ChafaTui {
             let (file_area, preview_area, debug_area) = self.ui_layout.calculate_layout(size);
             
             // Render components
+            let fb_start = Instant::now();
             UIRenderer::render_file_browser(f, file_area, &mut self.file_browser, true);
-            
+            eprintln!("[DRAW] render_file_browser took: {:?}", fb_start.elapsed());
+
+            let preview_start = Instant::now();
             UIRenderer::render_preview(
                 f,
                 preview_area,
@@ -925,14 +947,19 @@ impl ChafaTui {
                 &self.localization,
                 self.ascii_logo.as_ref(),
             );
-            
+            eprintln!("[DRAW] render_preview took: {:?}", preview_start.elapsed());
+
+            let debug_start = Instant::now();
             UIRenderer::render_debug_pane(
                 f,
                 debug_area,
                 self.preview_manager.get_debug_info(),
                 &self.localization,
             );
+            eprintln!("[DRAW] render_debug_pane took: {:?}", debug_start.elapsed());
         }
+
+        eprintln!("[DRAW] TOTAL app.draw() took: {:?}", draw_start.elapsed());
 
         // Render delete confirmation dialog overlay if needed
         if self.show_delete_confirmation

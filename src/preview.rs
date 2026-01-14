@@ -3,7 +3,6 @@ use crate::converter::{self, AsciiConverter};
 use crate::fast_image_loader::FastImageLoader;
 use crate::file_browser::FileItem;
 use crate::localization::Localization;
-use crate::viuer_protocol::ViuerKittyProtocol;
 use ansi_to_tui::IntoText;
 use ratatui::text::Text;
 use std::collections::HashMap;
@@ -14,6 +13,7 @@ use std::process::Command;
 use std::rc::Rc;
 use std::cell::RefCell;
 use ratatui_image::protocol::StatefulProtocol;
+use ratatui_image::picker::Picker;
 
 #[derive(Clone)]
 pub enum PreviewContent {
@@ -28,8 +28,10 @@ pub struct GraphicalPreview {
     pub width: u16,
     #[allow(dead_code)]
     pub height: u16,
-    pub img_width: u32,  // Actual image pixel width
-    pub img_height: u32, // Actual image pixel height
+    #[allow(dead_code)]
+    pub img_width: u32,  // Actual image pixel width (stored for future use)
+    #[allow(dead_code)]
+    pub img_height: u32, // Actual image pixel height (stored for future use)
     pub protocol: Box<dyn StatefulProtocol>,
 }
 
@@ -40,12 +42,28 @@ pub struct PreviewManager {
     converter: Box<dyn AsciiConverter>,
     pub graphical_max_dimension: u32,
     pub debug_info: String,
+    picker: Option<RefCell<Picker>>, // For creating terminal-specific image protocols
 }
 
 impl PreviewManager {
     pub fn new(config: PTuiConfig) -> Self {
-        let graphical_max_dimension = Self::calculate_optimal_dimension(&config);
         let converter = converter::create_converter(&config);
+
+        // Initialize picker for terminal-specific protocol detection
+        let picker = Picker::from_termios().ok().map(|mut p| {
+            p.guess_protocol();
+            RefCell::new(p)
+        });
+
+        // Calculate dimension based on font size if available
+        let graphical_max_dimension = if let Some(ref picker) = picker {
+            Self::calculate_dimension_from_picker(&picker.borrow(), &config)
+        } else {
+            Self::calculate_optimal_dimension(&config)
+        };
+
+        eprintln!("[PREVIEW] Using graphical_max_dimension: {}px", graphical_max_dimension);
+
         Self {
             cache: HashMap::new(),
             cache_order: Vec::new(),
@@ -55,7 +73,40 @@ impl PreviewManager {
             converter,
             graphical_max_dimension,
             debug_info: String::new(),
+            picker,
         }
+    }
+
+    /// Calculate dimension from picker's font size (most accurate)
+    fn calculate_dimension_from_picker(picker: &Picker, config: &PTuiConfig) -> u32 {
+        if !config.converter.graphical.auto_resize {
+            return config.converter.graphical.max_dimension;
+        }
+
+        // Get terminal size in characters
+        let (term_cols, term_rows) = crossterm::terminal::size().unwrap_or((80, 24));
+
+        // Get actual font size from picker (field, not method)
+        let font_width = picker.font_size.0 as u32;
+        let font_height = picker.font_size.1 as u32;
+
+        eprintln!("[PREVIEW] Font size from picker: {}x{}px per char", font_width, font_height);
+
+        // Preview pane typically uses 70-85% of terminal width
+        let preview_cols = ((term_cols as f32) * 0.75) as u32;
+        let preview_rows = ((term_rows as f32) * 0.85) as u32;
+
+        // Calculate actual display size in pixels
+        let display_width = preview_cols * font_width;
+        let display_height = preview_rows * font_height;
+
+        eprintln!("[PREVIEW] Preview pane: {}x{} cells = {}x{}px",
+            preview_cols, preview_rows, display_width, display_height);
+
+        // Use the maximum dimension to ensure image fills the space
+        // Clamp to reasonable limits for performance
+        let optimal = display_width.max(display_height);
+        optimal.clamp(512, 2048)
     }
 
     /// Calculate optimal max_dimension based on terminal size
@@ -84,10 +135,9 @@ impl PreviewManager {
         // Terminal graphics don't need high DPI - Kitty/iTerm scale well
         let optimal = (display_width.max(display_height) as f32 * 0.9) as u32;
 
-        // Aggressive clamping for <1s load times:
-        // - 256: Minimum acceptable quality
-        // - 512: Maximum for <1s performance
-        let capped = optimal.clamp(512, 1024);
+        // With turbojpeg, we can handle larger images quickly
+        // Allow up to 2048px for better fill in large terminals
+        let capped = optimal.clamp(512, 2048);
 
         eprintln!("[AUTO-RESIZE] Terminal: {}x{} chars, Display: ~{}x{}px, Optimal: {} (capped: {})",
             term_cols, term_rows, display_width, display_height, optimal, capped);
@@ -199,29 +249,28 @@ impl PreviewManager {
                     let (img_w, img_h) = (img.width(), img.height());
                     eprintln!("[TIMING] Total image load ({}x{}): {:?}", img_w, img_h, load_time);
 
-                    // Create custom viuer-based protocol
+                    // Create terminal-specific protocol (iTerm2, Kitty, Sixel, etc.)
                     let protocol_start = Instant::now();
-                    // Generate unique ID based on file path hash
-                    use std::collections::hash_map::DefaultHasher;
-                    use std::hash::{Hash, Hasher};
-                    let mut hasher = DefaultHasher::new();
-                    path.hash(&mut hasher);
-                    let unique_id = (hasher.finish() % 255) as u8;
-                    let protocol: Box<dyn StatefulProtocol> = Box::new(
-                        ViuerKittyProtocol::new_with_config(img, unique_id, self.graphical_max_dimension)
-                    );
-                    let protocol_time = protocol_start.elapsed();
-                    eprintln!("[TIMING] Protocol creation: {:?}", protocol_time);
-                    eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());
+                    if let Some(ref picker) = self.picker {
+                        // Use ratatui-image's protocol picker for correct terminal protocol
+                        let protocol = picker.borrow_mut().new_resize_protocol(img);
+                        let protocol_time = protocol_start.elapsed();
+                        eprintln!("[TIMING] Protocol creation: {:?}", protocol_time);
+                        eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());
 
-                    PreviewContent::Graphical(Rc::new(RefCell::new(GraphicalPreview {
-                        path: path.to_string(),
-                        width: converter_width,
-                        height: converter_height,
-                        img_width: img_w,
-                        img_height: img_h,
-                        protocol,
-                    })))
+                        PreviewContent::Graphical(Rc::new(RefCell::new(GraphicalPreview {
+                            path: path.to_string(),
+                            width: converter_width,
+                            height: converter_height,
+                            img_width: img_w,
+                            img_height: img_h,
+                            protocol,
+                        })))
+                    } else {
+                        // Fallback to ASCII if picker not available
+                        eprintln!("[WARN] Picker not available, falling back to ASCII rendering");
+                        PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height))
+                    }
                 }
                 Err(e) => {
                     // Fallback to error text if image can't be loaded
