@@ -56,7 +56,7 @@ pub struct PreviewManager {
     graphics_support: TerminalGraphicsSupport,
     picker: Option<Picker>, // For creating terminal-specific image protocols
     font_size: (u16, u16),  // Cached font size (width, height) in pixels
-    pub config: PTuiConfig,     // Store the config for converter switching
+    pub config: PTuiConfig, // Store the config for converter switching
 }
 
 impl PreviewManager {

@@ -186,9 +186,11 @@ impl UIRenderer {
                     .title(format!("🖼️ {}", localization.get("image_preview")))
                     .borders(Borders::ALL);
 
+                // For text previews (chafa/jp2a), center the content horizontally
                 let preview_paragraph = Paragraph::new(text.clone())
                     .block(preview_block)
-                    .wrap(Wrap { trim: false });
+                    .wrap(Wrap { trim: false })
+                    .alignment(Alignment::Center);
 
                 f.render_widget(preview_paragraph, area);
             }
