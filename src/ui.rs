@@ -2,11 +2,11 @@ use crate::file_browser::FileBrowser;
 use crate::localization::Localization;
 use crate::preview::PreviewContent;
 use ratatui::{
+    Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::Text,
     widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
-    Frame,
 };
 use ratatui_image::{Resize, StatefulImage};
 
@@ -95,7 +95,10 @@ impl UILayout {
 
     pub fn decrease_size(&mut self, increment: u16) {
         if self.can_decrease_size() {
-            self.preview_size = self.preview_size.saturating_sub(increment).max(self.min_divider_percent);
+            self.preview_size = self
+                .preview_size
+                .saturating_sub(increment)
+                .max(self.min_divider_percent);
         }
     }
 }
@@ -144,7 +147,9 @@ impl UIRenderer {
                 };
                 
                 let style = if i == file_browser.selected_index && is_selected_highlighted {
-                    Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD)
                 } else {
                     Style::default()
                 };
@@ -211,14 +216,18 @@ impl UIRenderer {
                 #[cfg(not(test))]
                 eprintln!("[UI] Protocol type: {:?}", graphical_borrow.protocol_type);
 
-                let centered_area = if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
+                let centered_area = if graphical_borrow.protocol_type
+                    == TerminalGraphicsSupport::Iterm2
+                {
                     // iTerm2: Calculate exact cell dimensions based on pixel size and font size
                     let font_width = graphical_borrow.font_size.0 as u32;
                     let font_height = graphical_borrow.font_size.1 as u32;
 
                     // Calculate how many cells the resized image needs
-                    let needed_width_cells = ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
-                    let needed_height_cells = ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
+                    let needed_width_cells =
+                        ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
+                    let needed_height_cells =
+                        ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
 
                     // Clamp to available area
                     let width = needed_width_cells.min(inner_area.width);
@@ -229,10 +238,17 @@ impl UIRenderer {
                     let y_offset = (inner_area.height.saturating_sub(height)) / 2;
 
                     #[cfg(not(test))]
-                    eprintln!("[UI] iTerm2: Image {}x{}px, Font {}x{}px, Needs {}x{} cells, Centered at +{}+{}",
-                        graphical_borrow.img_width, graphical_borrow.img_height,
-                        font_width, font_height,
-                        width, height, x_offset, y_offset);
+                    eprintln!(
+                        "[UI] iTerm2: Image {}x{}px, Font {}x{}px, Needs {}x{} cells, Centered at +{}+{}",
+                        graphical_borrow.img_width,
+                        graphical_borrow.img_height,
+                        font_width,
+                        font_height,
+                        width,
+                        height,
+                        x_offset,
+                        y_offset
+                    );
 
                     Rect {
                         x: inner_area.x + x_offset,
@@ -244,7 +260,11 @@ impl UIRenderer {
                     // Kitty/Ghostty: Use actual font metrics for aspect ratio compensation
                     let font_width = graphical_borrow.font_size.0 as f32;
                     let font_height = graphical_borrow.font_size.1 as f32;
-                    let char_aspect = if font_width > 0.0 { font_height / font_width } else { 2.0 };
+                    let char_aspect = if font_width > 0.0 {
+                        font_height / font_width
+                    } else {
+                        2.0
+                    };
 
                     let centered = Self::calculate_centered_image_area_with_aspect(
                         inner_area,
@@ -253,17 +273,28 @@ impl UIRenderer {
                         char_aspect,
                     );
                     #[cfg(not(test))]
-                    eprintln!("[UI] Kitty: Image {}x{}px, Area {}x{} cells, Font {}x{}px (aspect {:.2}), Centered {}x{} cells",
-                        graphical_borrow.img_width, graphical_borrow.img_height,
-                        inner_area.width, inner_area.height,
-                        font_width, font_height, char_aspect,
-                        centered.width, centered.height);
+                    eprintln!(
+                        "[UI] Kitty: Image {}x{}px, Area {}x{} cells, Font {}x{}px (aspect {:.2}), Centered {}x{} cells",
+                        graphical_borrow.img_width,
+                        graphical_borrow.img_height,
+                        inner_area.width,
+                        inner_area.height,
+                        font_width,
+                        font_height,
+                        char_aspect,
+                        centered.width,
+                        centered.height
+                    );
                     centered
                 };
 
                 // Use Fit to fill available space
                 let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
-                f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow.protocol);
+                f.render_stateful_widget(
+                    image_widget,
+                    centered_area,
+                    &mut graphical_borrow.protocol,
+                );
             }
             None => {
                 // Show help text with logo if available
@@ -283,7 +314,7 @@ impl UIRenderer {
                             combined.lines.push(line);
                         }
                         combined
-                    },
+                    }
                     None => Text::from(help_text),
         };
 
@@ -312,10 +343,12 @@ impl UIRenderer {
                 // Replace placeholders with localized subtitle and version
                 let mut localized_content = content;
                 if localized_content.contains("{app_subtitle}") {
-                    localized_content = localized_content.replace("{app_subtitle}", &localization.get("app_subtitle"));
+                    localized_content = localized_content
+                        .replace("{app_subtitle}", &localization.get("app_subtitle"));
                 }
                 if localized_content.contains("{version}") {
-                    localized_content = localized_content.replace("{version}", env!("CARGO_PKG_VERSION"));
+                    localized_content =
+                        localized_content.replace("{version}", env!("CARGO_PKG_VERSION"));
                 }
                 
                 new_line.spans.push(ratatui::text::Span {
@@ -330,7 +363,12 @@ impl UIRenderer {
         localized_logo
     }
 
-    pub fn render_debug_pane(f: &mut Frame, area: Rect, debug_info: &str, localization: &Localization) {
+    pub fn render_debug_pane(
+        f: &mut Frame,
+        area: Rect,
+        debug_info: &str,
+        localization: &Localization,
+    ) {
         let debug_block = Block::default()
             .title(format!("🔍 {}", localization.get("messages")))
             .borders(Borders::ALL)
@@ -374,13 +412,16 @@ impl UIRenderer {
 
                 // Calculate centered area
                 use crate::preview::TerminalGraphicsSupport;
-                let centered_area = if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
+                let centered_area =
+                    if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
                     // iTerm2: Calculate exact cell dimensions
                     let font_width = graphical_borrow.font_size.0 as u32;
                     let font_height = graphical_borrow.font_size.1 as u32;
 
-                    let needed_width_cells = ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
-                    let needed_height_cells = ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
+                        let needed_width_cells =
+                            ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
+                        let needed_height_cells =
+                            ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
 
                     let width = needed_width_cells.min(chunks[0].width);
                     let height = needed_height_cells.min(chunks[0].height);
@@ -398,7 +439,11 @@ impl UIRenderer {
                     // Kitty/Ghostty: Use actual font metrics for aspect ratio compensation
                     let font_width = graphical_borrow.font_size.0 as f32;
                     let font_height = graphical_borrow.font_size.1 as f32;
-                    let char_aspect = if font_width > 0.0 { font_height / font_width } else { 2.0 };
+                        let char_aspect = if font_width > 0.0 {
+                            font_height / font_width
+                        } else {
+                            2.0
+                        };
 
                     Self::calculate_centered_image_area_with_aspect(
                         chunks[0],
@@ -409,7 +454,11 @@ impl UIRenderer {
                 };
 
                 let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
-                f.render_stateful_widget(image_widget, centered_area, &mut graphical_borrow.protocol);
+                f.render_stateful_widget(
+                    image_widget,
+                    centered_area,
+                    &mut graphical_borrow.protocol,
+                );
             }
             None => {
                 let content = Text::from(localization.get("no_file_selected"));
@@ -437,7 +486,11 @@ impl UIRenderer {
         let status_paragraph = Paragraph::new(status_text)
             .block(status_block)
             .alignment(Alignment::Center)
-            .style(Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD));
+            .style(
+                Style::default()
+                    .fg(Color::Yellow)
+                    .add_modifier(Modifier::BOLD),
+            );
 
         f.render_widget(status_paragraph, chunks[1]);
     }
@@ -449,9 +502,9 @@ impl UIRenderer {
         localization: &Localization,
     ) {
         use fluent::fluent_args;
-        use ratatui::widgets::{Block, Borders, Paragraph, Clear};
-        use ratatui::layout::{Alignment};
-        use ratatui::style::{Color, Style, Modifier};
+        use ratatui::layout::Alignment;
+        use ratatui::style::{Color, Modifier, Style};
+        use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
         // Calculate centered dialog position
         let dialog_width = 50.min(area.width.saturating_sub(4));
@@ -486,7 +539,12 @@ impl UIRenderer {
     }
 
     /// Calculate a horizontally-centered area for an image based on its aspect ratio
-    fn calculate_centered_image_area_with_aspect(area: Rect, img_width: u32, img_height: u32, char_aspect: f32) -> Rect {
+    fn calculate_centered_image_area_with_aspect(
+        area: Rect,
+        img_width: u32,
+        img_height: u32,
+        char_aspect: f32,
+    ) -> Rect {
         if img_width == 0 || img_height == 0 {
             return area;
         }
@@ -670,15 +728,18 @@ mod tests {
     fn test_ui_renderer_file_browser_empty() {
         let temp_fs = TestFileSystem::new().unwrap();
         
-        let mut file_browser = crate::file_browser::FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
+        let mut file_browser =
+            crate::file_browser::FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
         let area = Rect::new(0, 0, 50, 20);
         
         let backend = ratatui::backend::TestBackend::new(50, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         
-        terminal.draw(|f| {
+        terminal
+            .draw(|f| {
             UIRenderer::render_file_browser(f, area, &mut file_browser, true);
-        }).unwrap();
+            })
+            .unwrap();
     }
 
     #[test]
@@ -692,9 +753,11 @@ mod tests {
         let backend = ratatui::backend::TestBackend::new(50, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         
-        terminal.draw(|f| {
+        terminal
+            .draw(|f| {
             UIRenderer::render_preview(f, area, Some(&preview), &localization, None);
-        }).unwrap();
+            })
+            .unwrap();
     }
 
     #[test]
@@ -705,9 +768,11 @@ mod tests {
         let backend = ratatui::backend::TestBackend::new(50, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         
-        terminal.draw(|f| {
+        terminal
+            .draw(|f| {
             UIRenderer::render_preview(f, area, None, &localization, None);
-        }).unwrap();
+            })
+            .unwrap();
     }
 
     #[test]
@@ -719,9 +784,11 @@ mod tests {
         let backend = ratatui::backend::TestBackend::new(50, 5);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         
-        terminal.draw(|f| {
+        terminal
+            .draw(|f| {
             UIRenderer::render_debug_pane(f, area, debug_info, &localization);
-        }).unwrap();
+            })
+            .unwrap();
     }
 
     #[test]
@@ -735,18 +802,21 @@ mod tests {
         let backend = ratatui::backend::TestBackend::new(80, 30);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
         
-        terminal.draw(|f| {
+        terminal
+            .draw(|f| {
             UIRenderer::render_slideshow(f, area, Some(&preview), &localization, 3, 10);
-        }).unwrap();
+            })
+            .unwrap();
     }
 
     #[test]
     fn test_ui_renderer_localize_logo_text() {
         let localization = crate::localization::Localization::new("en").unwrap();
         let mut logo = Text::default();
-        logo.lines.push(ratatui::text::Line::from(vec![
-            ratatui::text::Span::from("Test {app_subtitle} v{version} Logo")
-        ]));
+        logo.lines
+            .push(ratatui::text::Line::from(vec![ratatui::text::Span::from(
+                "Test {app_subtitle} v{version} Logo",
+            )]));
         
         let localized = UIRenderer::localize_logo_text(&logo, &localization);
         

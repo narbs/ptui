@@ -974,7 +974,8 @@ impl ChafaTui {
         #[cfg(not(test))]
         {
             // Check if current preview is text-based (not graphical)
-            let is_current_graphical = matches!(&self.preview_content, Some(PreviewContent::Graphical(_)));
+            let is_current_graphical =
+                matches!(&self.preview_content, Some(PreviewContent::Graphical(_)));
 
             if !is_current_graphical {
                 use std::io::Write;

@@ -4,11 +4,10 @@
 /// This combines:
 /// - ratatui-image's protocol detection and trait interface
 /// - viuer's faster RGBA8 encoding and simpler escape sequences
-
-use base64::{engine::general_purpose, Engine};
+use base64::{Engine, engine::general_purpose};
 use image::{DynamicImage, Rgb};
 use ratatui::{buffer::Buffer, layout::Rect};
-use ratatui_image::{protocol::StatefulProtocol, Resize};
+use ratatui_image::{Resize, protocol::StatefulProtocol};
 
 #[derive(Clone)]
 pub struct ViuerKittyProtocol {
@@ -35,7 +34,12 @@ impl ViuerKittyProtocol {
         Self::new_with_config(image, unique_id, 1024, 2.0)
     }
 
-    pub fn new_with_config(image: DynamicImage, unique_id: u8, max_dimension: u32, char_aspect_ratio: f32) -> Self {
+    pub fn new_with_config(
+        image: DynamicImage,
+        unique_id: u8,
+        max_dimension: u32,
+        char_aspect_ratio: f32,
+    ) -> Self {
         Self {
             image,
             escape_sequence: String::new(),
@@ -158,20 +162,33 @@ impl StatefulProtocol for ViuerKittyProtocol {
         // Downscaling based on config (default 768px for fast encoding)
         // Base64 encoding is the bottleneck - smaller images = faster encoding
         // Quality is still excellent for terminal display
-        let needs_downscale = self.image.width() > self.max_dimension || self.image.height() > self.max_dimension;
+        let needs_downscale =
+            self.image.width() > self.max_dimension || self.image.height() > self.max_dimension;
 
         let img_to_encode = if needs_downscale {
-            let scale = (self.max_dimension as f32 / self.image.width().max(self.image.height()) as f32).min(1.0);
+            let scale = (self.max_dimension as f32
+                / self.image.width().max(self.image.height()) as f32)
+                .min(1.0);
             let new_width = (self.image.width() as f32 * scale) as u32;
             let new_height = (self.image.height() as f32 * scale) as u32;
 
             #[cfg(not(test))]
             let resize_start = Instant::now();
             // Use fastest filter - Nearest is 10x faster than Triangle/Lanczos
-            let resized = self.image.resize_exact(new_width, new_height, image::imageops::FilterType::Nearest);
+            let resized = self.image.resize_exact(
+                new_width,
+                new_height,
+                image::imageops::FilterType::Nearest,
+            );
             #[cfg(not(test))]
-            eprintln!("[TIMING] Resize {}x{} -> {}x{}: {:?}",
-                self.image.width(), self.image.height(), new_width, new_height, resize_start.elapsed());
+            eprintln!(
+                "[TIMING] Resize {}x{} -> {}x{}: {:?}",
+                self.image.width(),
+                self.image.height(),
+                new_width,
+                new_height,
+                resize_start.elapsed()
+            );
             resized
         } else {
             self.image.clone()
@@ -181,10 +198,13 @@ impl StatefulProtocol for ViuerKittyProtocol {
         let encode_start = Instant::now();
         self.escape_sequence = self.encode_image(&img_to_encode, width, height);
         #[cfg(not(test))]
-        eprintln!("[TIMING] Base64 encode ({}x{} = {}MB): {:?}",
-            img_to_encode.width(), img_to_encode.height(),
+        eprintln!(
+            "[TIMING] Base64 encode ({}x{} = {}MB): {:?}",
+            img_to_encode.width(),
+            img_to_encode.height(),
             (img_to_encode.width() * img_to_encode.height() * 4) / 1_000_000,
-            encode_start.elapsed());
+            encode_start.elapsed()
+        );
 
         self.rect = Rect::new(0, 0, width, height);
         self.needs_retransmit = false;
@@ -226,16 +246,18 @@ impl StatefulProtocol for ViuerKittyProtocol {
 
         // Clear the screen area by deleting all images with action 'a=d,d=a' (delete all)
         // This ensures old images don't remain visible
+        #[cfg(not(test))]
+        {
+            use std::io::Write;
         let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
+            let _ = std::io::stdout().write_all(delete_all_cmd.as_bytes());
+            let _ = std::io::stdout().flush();
+        }
 
-        // Write the delete-all command followed by the new image escape sequence
-        let full_sequence = format!("{}{}", delete_all_cmd, &self.escape_sequence);
-
-        // Write into the first cell of the area
+        // Write the new image escape sequence into the buffer (without delete command)
         // The Kitty protocol will handle the actual image placement
         if area.width > 0 && area.height > 0 {
-            buf[(area.left(), area.top())]
-                .set_symbol(&full_sequence);
+            buf[(area.left(), area.top())].set_symbol(&self.escape_sequence);
 
             // Mark other cells as skipped to prevent overwrites
             for y in 0..area.height.min(self.rect.height) {

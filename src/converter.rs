@@ -1,8 +1,8 @@
 use crate::config::{ChafaConfig, Jp2aConfig, PTuiConfig};
-use std::process::Command;
 #[cfg(not(test))]
 use ratatui_image::picker::Picker;
 use ratatui_image::picker::ProtocolType;
+use std::process::Command;
 
 pub trait AsciiConverter {
     fn convert_image(&self, path: &str, width: u16, height: u16) -> Result<String, String>;
@@ -24,7 +24,9 @@ impl ChafaConverter {
         if let Ok(term_program) = std::env::var("TERM_PROGRAM") {
             if term_program.contains("Apple_Terminal") && config.colors == "full" {
                 #[cfg(not(test))]
-                eprintln!("[CHAFA] Detected macOS Terminal.app - switching from 'full' to '256' colors for compatibility");
+                eprintln!(
+                    "[CHAFA] Detected macOS Terminal.app - switching from 'full' to '256' colors for compatibility"
+                );
                 config.colors = "256".to_string();
             }
         }
@@ -50,7 +52,10 @@ impl AsciiConverter for ChafaConverter {
                 if output.status.success() {
                     Ok(String::from_utf8_lossy(&output.stdout).to_string())
                 } else {
-                    Err(format!("Chafa error: {}", String::from_utf8_lossy(&output.stderr)))
+                    Err(format!(
+                        "Chafa error: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    ))
                 }
             }
             Err(e) => Err(format!("Failed to execute chafa: {}", e)),
@@ -107,7 +112,10 @@ impl AsciiConverter for Jp2aConverter {
                 if output.status.success() {
                     Ok(String::from_utf8_lossy(&output.stdout).to_string())
                 } else {
-                    Err(format!("jp2a error: {}", String::from_utf8_lossy(&output.stderr)))
+                    Err(format!(
+                        "jp2a error: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    ))
                 }
             }
             Err(e) => Err(format!("Failed to execute jp2a: {}", e)),
@@ -143,7 +151,8 @@ impl GraphicalConverter {
         #[cfg(not(test))]
         {
             // Try protocol detection
-            let mut picker = Picker::from_termios().map_err(|e| format!("Failed to create picker: {:?}", e))?;
+            let mut picker =
+                Picker::from_termios().map_err(|e| format!("Failed to create picker: {:?}", e))?;
             picker.guess_protocol();
             let protocol_type = picker.protocol_type;
 
@@ -196,12 +205,18 @@ pub fn create_converter(config: &PTuiConfig) -> Box<dyn AsciiConverter> {
             match GraphicalConverter::new(config.converter.chafa.clone()) {
                 Ok(converter) => {
                     #[cfg(not(test))]
-                    eprintln!("Using graphical mode with protocol: {:?}", converter.get_protocol_type());
+                    eprintln!(
+                        "Using graphical mode with protocol: {:?}",
+                        converter.get_protocol_type()
+                    );
                     Box::new(converter)
                 }
                 Err(e) => {
                     #[cfg(not(test))]
-                    eprintln!("Failed to initialize graphical mode: {}. Falling back to chafa.", e);
+                    eprintln!(
+                        "Failed to initialize graphical mode: {}. Falling back to chafa.",
+                        e
+                    );
                     #[cfg(test)]
                     let _ = e; // Suppress unused warning in tests
                     Box::new(ChafaConverter::new(config.converter.chafa.clone()))
@@ -309,8 +324,7 @@ mod tests {
         let result = converter.convert_image("test.jpg", 80, 24);
         
         match result {
-            Ok(_) => {
-            },
+            Ok(_) => {}
             Err(e) => {
                 assert!(e.contains("chafa") || e.contains("Failed to execute"));
             }
@@ -330,8 +344,7 @@ mod tests {
         let result = converter.convert_image("test.jpg", 80, 24);
         
         match result {
-            Ok(_) => {
-            },
+            Ok(_) => {}
             Err(e) => {
                 assert!(e.contains("jp2a") || e.contains("Failed to execute"));
             }

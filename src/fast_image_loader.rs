@@ -22,8 +22,7 @@ impl FastImageLoader {
             // Try fast decoders in order of speed
             #[cfg(feature = "fast-jpeg")]
             {
-                Self::load_jpeg_turbojpeg(path, target_max_dimension)
-                    .or_else(|e| {
+                Self::load_jpeg_turbojpeg(path, target_max_dimension).or_else(|e| {
                         #[cfg(not(test))]
                         eprintln!("[TURBOJPEG] Failed: {}, falling back to zune-jpeg", e);
                         Self::load_jpeg_zune(path, target_max_dimension)
@@ -43,14 +42,23 @@ impl FastImageLoader {
             Ok(img) => {
                 let decoder_name = if is_jpeg {
                     #[cfg(feature = "fast-jpeg")]
-                    { "turbojpeg" }
+                    {
+                        "turbojpeg"
+                    }
                     #[cfg(not(feature = "fast-jpeg"))]
-                    { "zune-jpeg" }
+                    {
+                        "zune-jpeg"
+                    }
                 } else {
                     "image-crate"
                 };
-                eprintln!("[FAST-LOADER] Loaded {}x{} in {:?} (decoder: {})",
-                    img.width(), img.height(), load_start.elapsed(), decoder_name);
+                eprintln!(
+                    "[FAST-LOADER] Loaded {}x{} in {:?} (decoder: {})",
+                    img.width(),
+                    img.height(),
+                    load_start.elapsed(),
+                    decoder_name
+                );
             }
             Err(e) => {
                 eprintln!("[FAST-LOADER] Failed to load: {}", e);
@@ -67,15 +75,15 @@ impl FastImageLoader {
         use turbojpeg::{Decompressor, Image, PixelFormat, ScalingFactor};
 
         // Read file into memory
-        let buffer = fs::read(path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let buffer = fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
         // Create decompressor
-        let mut decompressor = Decompressor::new()
-            .map_err(|e| format!("Failed to create decompressor: {}", e))?;
+        let mut decompressor =
+            Decompressor::new().map_err(|e| format!("Failed to create decompressor: {}", e))?;
 
         // Get image info to calculate optimal scale
-        let header = decompressor.read_header(&buffer)
+        let header = decompressor
+            .read_header(&buffer)
             .map_err(|e| format!("Failed to read JPEG header: {}", e))?;
 
         let original_width = header.width;
@@ -95,11 +103,14 @@ impl FastImageLoader {
         };
 
         #[cfg(not(test))]
-        eprintln!("[TURBOJPEG] Original: {}x{}, Target: {}, Scale: {:?}",
-            original_width, original_height, target_max_dimension, scaling_factor);
+        eprintln!(
+            "[TURBOJPEG] Original: {}x{}, Target: {}, Scale: {:?}",
+            original_width, original_height, target_max_dimension, scaling_factor
+        );
 
         // Set scaling factor on decompressor (THIS IS THE KEY!)
-        decompressor.set_scaling_factor(scaling_factor)
+        decompressor
+            .set_scaling_factor(scaling_factor)
             .map_err(|e| format!("Failed to set scaling factor: {:?}", e))?;
 
         // Get scaled dimensions from header
@@ -108,7 +119,10 @@ impl FastImageLoader {
         let output_height = scaled_header.height;
 
         #[cfg(not(test))]
-        eprintln!("[TURBOJPEG] Scaled dimensions: {}x{}", output_width, output_height);
+        eprintln!(
+            "[TURBOJPEG] Scaled dimensions: {}x{}",
+            output_width, output_height
+        );
 
         // Allocate output buffer for scaled image
         let output_size = output_width * output_height * 3; // RGB = 3 bytes per pixel
@@ -124,14 +138,19 @@ impl FastImageLoader {
         };
 
         // Decompress with scaling (now the decompressor knows to scale!)
-        decompressor.decompress(&buffer, output_image.as_deref_mut())
+        decompressor
+            .decompress(&buffer, output_image.as_deref_mut())
             .map_err(|e| format!("JPEG decompression failed: {:?}", e))?;
 
         #[cfg(not(test))]
-        eprintln!("[TURBOJPEG] Successfully decoded at: {}x{}", output_width, output_height);
+        eprintln!(
+            "[TURBOJPEG] Successfully decoded at: {}x{}",
+            output_width, output_height
+        );
 
         // Convert to DynamicImage
-        let img_buffer = image::RgbImage::from_raw(output_width as u32, output_height as u32, output_buf)
+        let img_buffer =
+            image::RgbImage::from_raw(output_width as u32, output_height as u32, output_buf)
             .ok_or_else(|| "Failed to create image buffer".to_string())?;
 
         Ok(DynamicImage::ImageRgb8(img_buffer))
@@ -141,26 +160,26 @@ impl FastImageLoader {
     fn load_jpeg_zune(path: &str, _target_max_dimension: u32) -> Result<DynamicImage, String> {
         use std::fs;
         use zune_jpeg::JpegDecoder;
-        use zune_jpeg::zune_core::options::DecoderOptions;
         use zune_jpeg::zune_core::colorspace::ColorSpace;
+        use zune_jpeg::zune_core::options::DecoderOptions;
 
         // Read file into memory
-        let buffer = fs::read(path)
-            .map_err(|e| format!("Failed to read file: {}", e))?;
+        let buffer = fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
 
         // Configure decoder for RGB output
-        let options = DecoderOptions::default()
-            .jpeg_set_out_colorspace(ColorSpace::RGB);
+        let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGB);
 
         // Create decoder with options
         let mut decoder = JpegDecoder::new_with_options(&buffer, options);
 
         // Decode
-        let pixels = decoder.decode()
+        let pixels = decoder
+            .decode()
             .map_err(|e| format!("JPEG decode failed: {:?}", e))?;
 
         // Get output dimensions after decode
-        let info = decoder.info()
+        let info = decoder
+            .info()
             .ok_or_else(|| "Failed to get decoder info".to_string())?;
         let width = info.width as u32;
         let height = info.height as u32;
@@ -177,8 +196,7 @@ impl FastImageLoader {
 
     /// Fallback loader using image crate
     fn load_with_image_crate(path: &str) -> Result<DynamicImage, String> {
-        image::open(path)
-            .map_err(|e| format!("Failed to load image: {}", e))
+        image::open(path).map_err(|e| format!("Failed to load image: {}", e))
     }
 }
 
@@ -189,16 +207,49 @@ mod tests {
         // 4032px image, target 512px:
         // Is 4032 > 512 * 8 (4096)? No
         // Is 4032 > 512 * 4 (2048)? Yes -> Use 1/4 scale
-        assert_eq!(4, if 4032 > 512 * 8 { 8 } else if 4032 > 512 * 4 { 4 } else if 4032 > 512 * 2 { 2 } else { 1 });
+        assert_eq!(
+            4,
+            if 4032 > 512 * 8 {
+                8
+            } else if 4032 > 512 * 4 {
+                4
+            } else if 4032 > 512 * 2 {
+                2
+            } else {
+                1
+            }
+        );
 
         // 2048px image, target 512px:
         // Is 2048 > 512 * 8? No
         // Is 2048 > 512 * 4 (2048)? No (not strictly greater)
         // Is 2048 > 512 * 2 (1024)? Yes -> Use 1/2 scale
-        assert_eq!(2, if 2048 > 512 * 8 { 8 } else if 2048 > 512 * 4 { 4 } else if 2048 > 512 * 2 { 2 } else { 1 });
+        assert_eq!(
+            2,
+            if 2048 > 512 * 8 {
+                8
+            } else if 2048 > 512 * 4 {
+                4
+            } else if 2048 > 512 * 2 {
+                2
+            } else {
+                1
+            }
+        );
 
         // 5000px image, target 512px: should use 1/8
         // Is 5000 > 512 * 8 (4096)? Yes -> Use 1/8 scale
-        assert_eq!(8, if 5000 > 512 * 8 { 8 } else if 5000 > 512 * 4 { 4 } else if 5000 > 512 * 2 { 2 } else { 1 });
+        assert_eq!(
+            8,
+            if 5000 > 512 * 8 {
+                8
+            } else if 5000 > 512 * 4 {
+                4
+            } else if 5000 > 512 * 2 {
+                2
+            } else {
+                1
+            }
+        );
     }
 }

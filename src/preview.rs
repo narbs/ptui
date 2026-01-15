@@ -6,15 +6,15 @@ use crate::localization::Localization;
 use crate::viuer_protocol::ViuerKittyProtocol;
 use ansi_to_tui::IntoText;
 use ratatui::text::Text;
+use ratatui_image::picker::Picker;
+use ratatui_image::protocol::StatefulProtocol;
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
-use std::cell::RefCell;
-use ratatui_image::protocol::StatefulProtocol;
-use ratatui_image::picker::Picker;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 #[cfg_attr(test, allow(dead_code))]
@@ -67,15 +67,19 @@ impl PreviewManager {
         let (graphics_support, picker) = Self::detect_graphics_support();
 
         #[cfg(not(test))]
-        eprintln!("[GRAPHICS] Terminal graphics support detected: {:?}", graphics_support);
+        eprintln!(
+            "[GRAPHICS] Terminal graphics support detected: {:?}",
+            graphics_support
+        );
 
         // Cache font size for later use
-        let font_size = picker.as_ref()
-            .map(|p| p.font_size)
-            .unwrap_or((14, 28)); // Default fallback
+        let font_size = picker.as_ref().map(|p| p.font_size).unwrap_or((14, 28)); // Default fallback
 
         #[cfg(not(test))]
-        eprintln!("[GRAPHICS] Font size: {}x{} pixels", font_size.0, font_size.1);
+        eprintln!(
+            "[GRAPHICS] Font size: {}x{} pixels",
+            font_size.0, font_size.1
+        );
 
         Self {
             cache: HashMap::new(),
@@ -132,7 +136,10 @@ impl PreviewManager {
                     // Check what protocol was detected
                     // The picker stores the detected protocol internally
                     eprintln!("[GRAPHICS] Picker created successfully");
-                    eprintln!("[GRAPHICS] Font size: {}x{}", picker.font_size.0, picker.font_size.1);
+                    eprintln!(
+                        "[GRAPHICS] Font size: {}x{}",
+                        picker.font_size.0, picker.font_size.1
+                    );
 
                     // Check environment variables and protocol detection
                     let term = std::env::var("TERM").unwrap_or_default();
@@ -145,7 +152,8 @@ impl PreviewManager {
                     // Kitty protocol is supported by: Kitty, Ghostty, WezTerm
                     let support = if term.contains("kitty")
                         || term_program.contains("ghostty")
-                        || term_program.contains("WezTerm") {
+                        || term_program.contains("WezTerm")
+                    {
                         eprintln!("[GRAPHICS] Detected Kitty protocol support");
                         TerminalGraphicsSupport::Kitty
                     } else if term_program.contains("iTerm") || term_program == "iTerm.app" {
@@ -153,7 +161,9 @@ impl PreviewManager {
                         TerminalGraphicsSupport::Iterm2
                     } else if term.contains("xterm") && picker.font_size != (0, 0) {
                         // Sixel support - check if terminal might support it
-                        eprintln!("[GRAPHICS] Possible Sixel support, but falling back to text for now");
+                        eprintln!(
+                            "[GRAPHICS] Possible Sixel support, but falling back to text for now"
+                        );
                         TerminalGraphicsSupport::None
                     } else {
                         eprintln!("[GRAPHICS] No graphics protocol detected, using text mode");
@@ -163,7 +173,10 @@ impl PreviewManager {
                     (support, Some(picker))
                 }
                 Err(e) => {
-                    eprintln!("[GRAPHICS] Failed to create picker: {}, falling back to text mode", e);
+                    eprintln!(
+                        "[GRAPHICS] Failed to create picker: {}, falling back to text mode",
+                        e
+                    );
                     (TerminalGraphicsSupport::None, None)
                 }
             }
@@ -206,8 +219,10 @@ impl PreviewManager {
         let capped = optimal.clamp(512, 1024);
 
         #[cfg(not(test))]
-        eprintln!("[AUTO-RESIZE] Terminal: {}x{} chars, Display: ~{}x{}px, Optimal: {} (capped: {})",
-            term_cols, term_rows, display_width, display_height, optimal, capped);
+        eprintln!(
+            "[AUTO-RESIZE] Terminal: {}x{} chars, Display: ~{}x{}px, Optimal: {} (capped: {})",
+            term_cols, term_rows, display_width, display_height, optimal, capped
+        );
 
         capped
     }
@@ -219,7 +234,6 @@ impl PreviewManager {
     pub fn converter_supports_transitions(&self) -> bool {
         self.converter.supports_transitions()
     }
-
 
     pub fn set_message(&mut self, message: String) {
         self.debug_info = message;
@@ -236,7 +250,13 @@ impl PreviewManager {
         self.cache_order.retain(|k| k != &cache_key);
     }
 
-    pub fn save_ascii_to_file(&mut self, file: &FileItem, width: u16, height: u16, localization: &Localization) -> Result<String, String> {
+    pub fn save_ascii_to_file(
+        &mut self,
+        file: &FileItem,
+        width: u16,
+        height: u16,
+        localization: &Localization,
+    ) -> Result<String, String> {
         if !file.is_image() {
             return Err(localization.get("selected_file_not_image").to_string());
         }
@@ -259,21 +279,39 @@ impl PreviewManager {
         }
 
         // Generate ASCII content using selected converter
-        let (converter_width, converter_height) = self.calculate_converter_dimensions(&file.path, width, height, localization);
-        let ascii_content = self.generate_ascii_content(&file.path, converter_width, converter_height)?;
+        let (converter_width, converter_height) =
+            self.calculate_converter_dimensions(&file.path, width, height, localization);
+        let ascii_content =
+            self.generate_ascii_content(&file.path, converter_width, converter_height)?;
 
         // Save to file
         match fs::write(&output_path, ascii_content) {
-            Ok(_) => Ok(format!("{} {}", localization.get("saved_to"), output_path.display())),
+            Ok(_) => Ok(format!(
+                "{} {}",
+                localization.get("saved_to"),
+                output_path.display()
+            )),
             Err(e) => Err(format!("Failed to write file: {}", e)),
         }
     }
 
-    fn generate_ascii_content(&self, path: &str, width: u16, height: u16) -> Result<String, String> {
+    fn generate_ascii_content(
+        &self,
+        path: &str,
+        width: u16,
+        height: u16,
+    ) -> Result<String, String> {
         self.converter.convert_image(path, width, height)
     }
 
-    pub fn generate_preview(&mut self, file: &FileItem, width: u16, height: u16, text_scroll_offset: usize, localization: &Localization) -> PreviewContent {
+    pub fn generate_preview(
+        &mut self,
+        file: &FileItem,
+        width: u16,
+        height: u16,
+        text_scroll_offset: usize,
+        localization: &Localization,
+    ) -> PreviewContent {
         if file.is_directory {
             self.debug_info = localization.get("directory_selected");
             return PreviewContent::Text(Text::from(localization.get("directory_selected")));
@@ -293,17 +331,26 @@ impl PreviewManager {
         }
     }
 
-    fn generate_image_preview(&mut self, path: &str, width: u16, height: u16, localization: &Localization) -> PreviewContent {
+    fn generate_image_preview(
+        &mut self,
+        path: &str,
+        width: u16,
+        height: u16,
+        localization: &Localization,
+    ) -> PreviewContent {
         let cache_key = format!("{}:{}x{}", path, width, height);
         
         if let Some(cached) = self.cache.get(&cache_key) {
             return cached.clone();
         }
 
-        let (converter_width, converter_height) = self.calculate_converter_dimensions(path, width, height, localization);
+        let (converter_width, converter_height) =
+            self.calculate_converter_dimensions(path, width, height, localization);
         
         // Check if converter is graphical AND terminal supports graphics
-        let result = if self.converter.is_graphical() && self.graphics_support != TerminalGraphicsSupport::None {
+        let result = if self.converter.is_graphical()
+            && self.graphics_support != TerminalGraphicsSupport::None
+        {
             // Use graphical protocol based on terminal capabilities
             #[cfg(not(test))]
             use std::time::Instant;
@@ -320,7 +367,10 @@ impl PreviewManager {
                     let original_w = img.width();
                     let original_h = img.height();
                     #[cfg(not(test))]
-                    eprintln!("[TIMING] Total image load ({}x{}): {:?}", original_w, original_h, load_time);
+                    eprintln!(
+                        "[TIMING] Total image load ({}x{}): {:?}",
+                        original_w, original_h, load_time
+                    );
 
                     // Create protocol based on terminal support
                     #[cfg(not(test))]
@@ -343,8 +393,17 @@ impl PreviewManager {
                             // Calculate actual character aspect ratio from font metrics
                             let font_width = self.font_size.0 as f32;
                             let font_height = self.font_size.1 as f32;
-                            let char_aspect = if font_width > 0.0 { font_height / font_width } else { 2.0 };
-                            Box::new(ViuerKittyProtocol::new_with_config(img, unique_id, self.graphical_max_dimension, char_aspect))
+                            let char_aspect = if font_width > 0.0 {
+                                font_height / font_width
+                            } else {
+                                2.0
+                            };
+                            Box::new(ViuerKittyProtocol::new_with_config(
+                                img,
+                                unique_id,
+                                self.graphical_max_dimension,
+                                char_aspect,
+                            ))
                         }
                         TerminalGraphicsSupport::Iterm2 => {
                             #[cfg(not(test))]
@@ -360,14 +419,23 @@ impl PreviewManager {
 
                                 #[cfg(not(test))]
                                 {
-                                    eprintln!("[ITERM2] Preview area: {}x{} cells = {}x{}px",
-                                        converter_width, converter_height, target_width_px, target_height_px);
-                                    eprintln!("[ITERM2] Original image: {}x{}px", original_w, original_h);
+                                    eprintln!(
+                                        "[ITERM2] Preview area: {}x{} cells = {}x{}px",
+                                        converter_width,
+                                        converter_height,
+                                        target_width_px,
+                                        target_height_px
+                                    );
+                                    eprintln!(
+                                        "[ITERM2] Original image: {}x{}px",
+                                        original_w, original_h
+                                    );
                                 }
 
                                 // Resize image to fit the display area while maintaining aspect ratio
                                 let img_aspect = original_w as f32 / original_h as f32;
-                                let target_aspect = target_width_px as f32 / target_height_px as f32;
+                                let target_aspect =
+                                    target_width_px as f32 / target_height_px as f32;
 
                                 let (resize_width, resize_height) = if img_aspect > target_aspect {
                                     // Image is wider - fit to width
@@ -382,39 +450,59 @@ impl PreviewManager {
                                 };
 
                                 #[cfg(not(test))]
-                                eprintln!("[ITERM2] Resizing image to: {}x{}px", resize_width, resize_height);
+                                eprintln!(
+                                    "[ITERM2] Resizing image to: {}x{}px",
+                                    resize_width, resize_height
+                                );
 
                                 // Resize the image
                                 let resized_img = img.resize_exact(
                                     resize_width,
                                     resize_height,
-                                    image::imageops::FilterType::Lanczos3
+                                    image::imageops::FilterType::Lanczos3,
                                 );
 
                                 // Update final dimensions to match resized image
                                 final_img_w = resize_width;
                                 final_img_h = resize_height;
                                 #[cfg(not(test))]
-                                eprintln!("[ITERM2] Final dimensions: {}x{}px", final_img_w, final_img_h);
+                                eprintln!(
+                                    "[ITERM2] Final dimensions: {}x{}px",
+                                    final_img_w, final_img_h
+                                );
 
                                 picker.new_resize_protocol(resized_img)
                             } else {
                                 #[cfg(not(test))]
                                 eprintln!("[PROTOCOL] No picker available, falling back to text");
-                                return PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height));
+                                return PreviewContent::Text(self.render_with_converter(
+                                    path,
+                                    converter_width,
+                                    converter_height,
+                                ));
                             }
                         }
                         TerminalGraphicsSupport::Sixel => {
                             #[cfg(not(test))]
-                            eprintln!("[PROTOCOL] Using Sixel protocol (not yet implemented, falling back to text)");
+                            eprintln!(
+                                "[PROTOCOL] Using Sixel protocol (not yet implemented, falling back to text)"
+                            );
                             // TODO: Implement Sixel support
-                            return PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height));
+                            return PreviewContent::Text(self.render_with_converter(
+                                path,
+                                converter_width,
+                                converter_height,
+                            ));
                         }
                         TerminalGraphicsSupport::None => {
                             // Should not reach here due to outer if condition
                             #[cfg(not(test))]
                             eprintln!("[PROTOCOL] No graphics support, using text");
-                            return PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height));
+                            return PreviewContent::Text(self.render_with_converter(
+                                path,
+                                converter_width,
+                                converter_height,
+                            ));
                         }
                     };
 
@@ -423,7 +511,10 @@ impl PreviewManager {
                     #[cfg(not(test))]
                     {
                         eprintln!("[TIMING] Protocol creation: {:?}", protocol_time);
-                        eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());
+                        eprintln!(
+                            "[TIMING] TOTAL preview generation: {:?}",
+                            total_start.elapsed()
+                        );
                     }
 
                     PreviewContent::Graphical(Rc::new(RefCell::new(GraphicalPreview {
@@ -449,7 +540,11 @@ impl PreviewManager {
             if self.graphics_support == TerminalGraphicsSupport::None {
                 eprintln!("[RENDER] Using text-based converter (graphics not supported)");
             }
-            PreviewContent::Text(self.render_with_converter(path, converter_width, converter_height))
+            PreviewContent::Text(self.render_with_converter(
+                path,
+                converter_width,
+                converter_height,
+            ))
         };
 
         // LRU cache eviction: remove oldest entry if cache is full
@@ -483,7 +578,11 @@ impl PreviewManager {
                         // If ANSI parsing fails, display as plain text with scroll offset
                         let lines: Vec<&str> = content.lines().collect();
                         let scrolled_lines: Vec<String> = if scroll_offset < lines.len() {
-                            lines.into_iter().skip(scroll_offset).map(|s| s.to_string()).collect()
+                            lines
+                                .into_iter()
+                                .skip(scroll_offset)
+                                .map(|s| s.to_string())
+                                .collect()
                         } else {
                             vec!["(End of file)".to_string()]
                         };
@@ -495,7 +594,12 @@ impl PreviewManager {
         }
     }
 
-    fn generate_text_preview(&self, path: &str, scroll_offset: usize, visible_height: u16) -> Text<'static> {
+    fn generate_text_preview(
+        &self,
+        path: &str,
+        scroll_offset: usize,
+        visible_height: u16,
+    ) -> Text<'static> {
         match std::fs::File::open(path) {
             Ok(file) => {
                 let reader = BufReader::new(file);
@@ -508,7 +612,10 @@ impl PreviewManager {
                         
                         // Still limit total lines to prevent excessive memory usage
                         if all_lines.len() > 10000 {
-                            all_lines.push("... (file too large for scrolling, showing first 10000 lines)".to_string());
+                            all_lines.push(
+                                "... (file too large for scrolling, showing first 10000 lines)"
+                                    .to_string(),
+                            );
                             break;
                         }
                     } else {
@@ -533,7 +640,13 @@ impl PreviewManager {
         }
     }
 
-    fn calculate_converter_dimensions(&mut self, path: &str, max_width: u16, max_height: u16, localization: &Localization) -> (u16, u16) {
+    fn calculate_converter_dimensions(
+        &mut self,
+        path: &str,
+        max_width: u16,
+        max_height: u16,
+        localization: &Localization,
+    ) -> (u16, u16) {
         let (img_width, img_height) = ImageDimensions::get_dimensions(path);
         
         self.debug_info = format!(
@@ -557,17 +670,20 @@ impl PreviewManager {
         let img_aspect_ratio = img_width as f32 / img_height as f32;
         
         let width_constrained_width = effective_max_width;
-        let width_constrained_height = 
-            ((width_constrained_width as f32) / img_aspect_ratio) as u16;
+        let width_constrained_height = ((width_constrained_width as f32) / img_aspect_ratio) as u16;
         
         let height_constrained_height = effective_max_height;
-        let height_constrained_width = 
-            ((height_constrained_height as f32) * img_aspect_ratio * char_aspect_ratio_height) as u16;
+        let height_constrained_width = ((height_constrained_height as f32)
+            * img_aspect_ratio
+            * char_aspect_ratio_height) as u16;
         
         let (final_width, final_height) = if width_constrained_height <= effective_max_height {
             (width_constrained_width, width_constrained_height)
         } else {
-            (height_constrained_width.min(effective_max_width), height_constrained_height)
+            (
+                height_constrained_width.min(effective_max_width),
+                height_constrained_height,
+            )
         };
         
         (final_width, final_height)
@@ -575,15 +691,17 @@ impl PreviewManager {
 
     fn render_with_converter(&mut self, path: &str, width: u16, height: u16) -> Text<'static> {
         match self.converter.convert_image(path, width, height) {
-            Ok(output) => {
-                match output.as_bytes().into_text() {
+            Ok(output) => match output.as_bytes().into_text() {
                     Ok(text) => text,
                     Err(_) => Text::from("Failed to parse ANSI output"),
-                }
-            }
+            },
             Err(e) => {
                 self.debug_info = format!("{} error: {}", self.converter.get_name(), e);
-                Text::from(format!("Failed to execute {}: {}", self.converter.get_name(), e))
+                Text::from(format!(
+                    "Failed to execute {}: {}",
+                    self.converter.get_name(),
+                    e
+                ))
             }
         }
     }
@@ -603,17 +721,20 @@ impl ImageDimensions {
         if let Ok(output) = Command::new("identify")
             .args(["-format", "%w %h", path])
             .output()
-            && output.status.success() {
+            && output.status.success()
+        {
                 let output_str = String::from_utf8_lossy(&output.stdout);
                 let parts: Vec<&str> = output_str.split_whitespace().collect();
                 if parts.len() >= 2
-                    && let (Ok(w), Ok(h)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>()) {
+                && let (Ok(w), Ok(h)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>())
+            {
                         return (w, h);
                     }
             }
         
         if let Ok(output) = Command::new("file").arg(path).output()
-            && output.status.success() {
+            && output.status.success()
+        {
                 let output_str = String::from_utf8_lossy(&output.stdout);
                 if let Some(dimensions) = Self::extract_dimensions_from_file_output(&output_str) {
                     return dimensions;
@@ -630,7 +751,8 @@ impl ImageDimensions {
         for i in 0..words.len().saturating_sub(2) {
             if let Ok(w) = words[i].parse::<u32>()
                 && words.get(i + 1).is_some_and(|s| *s == "x" || *s == "×")
-                    && let Some(h) = words.get(i + 2).and_then(|s| s.parse::<u32>().ok()) {
+                && let Some(h) = words.get(i + 2).and_then(|s| s.parse::<u32>().ok())
+            {
                         return Some((w, h));
                     }
         }
@@ -661,8 +783,8 @@ impl ImageDimensions {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::helpers::*;
     use crate::localization::Localization;
+    use crate::test_utils::helpers::*;
 
     #[test]
     fn test_preview_manager_creation() {
@@ -705,7 +827,9 @@ mod tests {
     #[test]
     fn test_preview_manager_text_file_preview() {
         let temp_fs = TestFileSystem::new().unwrap();
-        let file_path = temp_fs.create_file("test.txt", "Line 1\nLine 2\nLine 3").unwrap();
+        let file_path = temp_fs
+            .create_file("test.txt", "Line 1\nLine 2\nLine 3")
+            .unwrap();
         
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
@@ -762,7 +886,10 @@ mod tests {
         
         let preview = manager.generate_preview(&unsupported_item, 80, 24, 0, &localization);
         
-        assert_eq!(manager.debug_info, localization.get("file_type_not_supported"));
+        assert_eq!(
+            manager.debug_info,
+            localization.get("file_type_not_supported")
+        );
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
             PreviewContent::Graphical(_) => panic!("Expected text preview for unsupported file"),
@@ -815,7 +942,7 @@ mod tests {
         match result {
             Ok(message) => {
                 assert!(message.contains(localization.get("saved_to").as_str()));
-            },
+            }
             Err(e) => {
                 assert!(e.contains("chafa") || e.contains("Failed"));
             }
@@ -838,8 +965,13 @@ mod tests {
     #[test]
     fn test_preview_manager_text_file_scrolling() {
         let temp_fs = TestFileSystem::new().unwrap();
-        let test_content = (0..50).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
-        let file_path = temp_fs.create_file("scrollable.txt", &test_content).unwrap();
+        let test_content = (0..50)
+            .map(|i| format!("Line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let file_path = temp_fs
+            .create_file("scrollable.txt", &test_content)
+            .unwrap();
         
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
@@ -855,8 +987,15 @@ mod tests {
         // Test scrolling from the beginning (scroll_offset = 0)
         let preview1 = manager.generate_preview(&file_item, 80, 10, 0, &localization);
         let content1 = match preview1 {
-            PreviewContent::Text(text) => text.lines.iter()
-            .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+            PreviewContent::Text(text) => text
+                .lines
+                .iter()
+                .map(|line| {
+                    line.spans
+                        .iter()
+                        .map(|span| span.content.as_ref())
+                        .collect::<String>()
+                })
             .collect::<Vec<_>>()
                 .join("\n"),
             PreviewContent::Graphical(_) => panic!("Expected text preview"),
@@ -865,8 +1004,15 @@ mod tests {
         // Test scrolling with offset
         let preview2 = manager.generate_preview(&file_item, 80, 10, 5, &localization);
         let content2 = match preview2 {
-            PreviewContent::Text(text) => text.lines.iter()
-            .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+            PreviewContent::Text(text) => text
+                .lines
+                .iter()
+                .map(|line| {
+                    line.spans
+                        .iter()
+                        .map(|span| span.content.as_ref())
+                        .collect::<String>()
+                })
             .collect::<Vec<_>>()
                 .join("\n"),
             PreviewContent::Graphical(_) => panic!("Expected text preview"),
@@ -886,7 +1032,10 @@ mod tests {
     fn test_preview_manager_text_file_line_limit() {
         let temp_fs = TestFileSystem::new().unwrap();
         // Create a file with more than 10000 lines to trigger the limit
-        let large_content = (0..10002).map(|i| format!("Line {}", i)).collect::<Vec<_>>().join("\n");
+        let large_content = (0..10002)
+            .map(|i| format!("Line {}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         let file_path = temp_fs.create_file("large.txt", &large_content).unwrap();
         
         let config = create_test_config();
@@ -903,8 +1052,15 @@ mod tests {
         // Test with a large height parameter to see if limit is reached
         let preview = manager.generate_preview(&file_item, 80, 15000, 0, &localization);
         let content = match preview {
-            PreviewContent::Text(text) => text.lines.iter()
-            .map(|line| line.spans.iter().map(|span| span.content.as_ref()).collect::<String>())
+            PreviewContent::Text(text) => text
+                .lines
+                .iter()
+                .map(|line| {
+                    line.spans
+                        .iter()
+                        .map(|span| span.content.as_ref())
+                        .collect::<String>()
+                })
             .collect::<Vec<_>>()
                 .join("\n"),
             PreviewContent::Graphical(_) => panic!("Expected text preview"),
@@ -928,7 +1084,8 @@ mod tests {
         assert_eq!(result, Some((1920, 1080)));
         
         let output_without_dimensions = "test.jpg: ASCII text";
-        let result = ImageDimensions::extract_dimensions_from_file_output(output_without_dimensions);
+        let result =
+            ImageDimensions::extract_dimensions_from_file_output(output_without_dimensions);
         assert_eq!(result, None);
         
         let output_with_unicode_x = "test.jpg: PNG image data 800 × 600 8-bit/color RGBA";
@@ -936,7 +1093,8 @@ mod tests {
         assert_eq!(result, Some((800, 600)));
         
         let output_with_compact_format = "test.jpg: JPEG 1920x1080 24-bit";
-        let result = ImageDimensions::extract_dimensions_from_file_output(output_with_compact_format);
+        let result =
+            ImageDimensions::extract_dimensions_from_file_output(output_with_compact_format);
         assert_eq!(result, Some((1920, 1080)));
     }
 
@@ -982,7 +1140,8 @@ mod tests {
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
         
-        let (width, height) = manager.calculate_converter_dimensions(&image_path, 80, 24, &localization);
+        let (width, height) =
+            manager.calculate_converter_dimensions(&image_path, 80, 24, &localization);
         
         assert!(width > 0);
         assert!(height > 0);
