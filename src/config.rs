@@ -50,7 +50,7 @@ impl Default for Jp2aConfig {
             colors: true,
             invert: false,
             dither: "none".to_string(), // Note: jp2a doesn't support dithering, this field is ignored
-            chars: None, // Use jp2a default character set
+            chars: None,                // Use jp2a default character set
         }
     }
 }
@@ -146,7 +146,7 @@ impl PTuiConfig {
     pub fn load() -> Result<Self, Box<dyn Error>> {
         let config_dir = get_config_dir()?;
         let config_path = config_dir.join("ptui").join("ptui.json");
-        
+
         if config_path.exists() {
             let contents = fs::read_to_string(&config_path)?;
             if let Ok(mut config) = serde_json::from_str::<PTuiConfig>(&contents) {
@@ -161,7 +161,7 @@ impl PTuiConfig {
                 return Ok(config);
             }
         }
-        
+
         Self::create_default_config(&config_path)
     }
 
@@ -206,18 +206,18 @@ impl PTuiConfig {
         }
 
         let contents = fs::read_to_string(config_path)?;
-        
+
         // First validate that it's valid JSON
         let _json_value: serde_json::Value = serde_json::from_str(&contents)?;
-        
+
         // Then try to deserialize into PTuiConfig
         let mut config = serde_json::from_str::<PTuiConfig>(&contents)?;
-        
+
         // Handle backward compatibility: migrate old chafa config to new format
         if let Some(old_chafa) = config.chafa.take() {
             config.converter.chafa = old_chafa;
         }
-        
+
         Ok(config)
     }
 
@@ -227,62 +227,62 @@ impl PTuiConfig {
         let (tx, rx) = mpsc::channel();
         let config_path_clone = config_path.clone();
         let tx_clone = tx.clone();
-        
+
         thread::spawn(move || {
             let mut watcher =
                 match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
-                match res {
-                    Ok(event) => {
-                        // Only react to modify events (file content changes)
-                        if let EventKind::Modify(ModifyKind::Data(_)) = event.kind {
-                            // Small delay to ensure file write is complete
-                            thread::sleep(Duration::from_millis(100));
-                            
-                            match PTuiConfig::try_reload_from_file(&config_path_clone) {
-                                Ok(new_config) => {
-                                    if tx_clone.send(Ok(new_config)).is_err() {
-                                        // Channel closed, exit watcher
+                    match res {
+                        Ok(event) => {
+                            // Only react to modify events (file content changes)
+                            if let EventKind::Modify(ModifyKind::Data(_)) = event.kind {
+                                // Small delay to ensure file write is complete
+                                thread::sleep(Duration::from_millis(100));
+
+                                match PTuiConfig::try_reload_from_file(&config_path_clone) {
+                                    Ok(new_config) => {
+                                        if tx_clone.send(Ok(new_config)).is_err() {
+                                            // Channel closed, exit watcher
+                                        }
                                     }
-                                }
-                                Err(e) => {
+                                    Err(e) => {
                                         if tx_clone
                                             .send(Err(format!("Failed to reload config: {}", e)))
                                             .is_err()
                                         {
-                                        // Channel closed, exit watcher
+                                            // Channel closed, exit watcher
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                    Err(e) => {
-                        if tx_clone.send(Err(format!("Watch error: {}", e))).is_err() {
-                            // Channel closed, exit watcher
+                        Err(e) => {
+                            if tx_clone.send(Err(format!("Watch error: {}", e))).is_err() {
+                                // Channel closed, exit watcher
+                            }
                         }
                     }
-                }
-            }) {
-                Ok(watcher) => watcher,
-                Err(e) => {
-                    let _ = tx.send(Err(format!("Failed to create watcher: {}", e)));
-                    return;
-                }
-            };
-            
+                }) {
+                    Ok(watcher) => watcher,
+                    Err(e) => {
+                        let _ = tx.send(Err(format!("Failed to create watcher: {}", e)));
+                        return;
+                    }
+                };
+
             // Watch the config directory (not just the file, as editors often replace files)
             if let Some(config_dir) = config_path.parent()
                 && let Err(e) = watcher.watch(config_dir, RecursiveMode::NonRecursive)
             {
-                    let _ = tx.send(Err(format!("Failed to watch config directory: {}", e)));
-                    return;
-                }
-            
+                let _ = tx.send(Err(format!("Failed to watch config directory: {}", e)));
+                return;
+            }
+
             // Keep the watcher alive by running an infinite loop
             loop {
                 thread::sleep(Duration::from_secs(1));
             }
         });
-        
+
         Ok(rx)
     }
 }
@@ -368,7 +368,7 @@ mod tests {
         let config = create_test_config();
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: PTuiConfig = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(config.converter.selected, deserialized.converter.selected);
         assert_eq!(config.locale, deserialized.locale);
         assert_eq!(config.slideshow_delay_ms, deserialized.slideshow_delay_ms);
@@ -378,9 +378,9 @@ mod tests {
     fn test_load_nonexistent_config_creates_default() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("ptui").join("ptui.json");
-        
+
         let config = PTuiConfig::create_default_config(&config_path).unwrap();
-        
+
         assert_eq!(config.converter.selected, "chafa");
         assert_eq!(config.locale, Some("en".to_string()));
         assert_file_exists(&config_path.to_string_lossy());
@@ -390,7 +390,7 @@ mod tests {
     fn test_save_and_load_config() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("ptui.json");
-        
+
         let original_config = PTuiConfig {
             converter: ConverterConfig {
                 selected: "jp2a".to_string(),
@@ -401,12 +401,12 @@ mod tests {
             slideshow_transitions: Some(SlideshowTransitionConfig::default()),
             chafa: None,
         };
-        
+
         PTuiConfig::save_config(&config_path, &original_config).unwrap();
-        
+
         let contents = fs::read_to_string(&config_path).unwrap();
         let loaded_config: PTuiConfig = serde_json::from_str(&contents).unwrap();
-        
+
         assert_eq!(loaded_config.converter.selected, "jp2a");
         assert_eq!(loaded_config.locale, Some("de".to_string()));
         assert_eq!(loaded_config.slideshow_delay_ms, Some(3000));
@@ -416,7 +416,7 @@ mod tests {
     fn test_backward_compatibility_migration() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("ptui.json");
-        
+
         let old_config_json = r#"{
             "chafa": {
                 "format": "sixel",
@@ -442,17 +442,17 @@ mod tests {
                 "selected": "chafa"
             }
         }"#;
-        
+
         fs::write(&config_path, old_config_json).unwrap();
-        
+
         let contents = fs::read_to_string(&config_path).unwrap();
         let mut config: PTuiConfig = serde_json::from_str(&contents).unwrap();
-        
+
         if let Some(old_chafa) = config.chafa.take() {
             config.converter.chafa = old_chafa;
             PTuiConfig::save_config(&config_path, &config).unwrap();
         }
-        
+
         assert_eq!(config.converter.chafa.format, "sixel");
         assert_eq!(config.converter.chafa.colors, "256");
         assert_eq!(config.locale, Some("ja".to_string()));
@@ -463,9 +463,9 @@ mod tests {
     fn test_invalid_config_falls_back_to_default() {
         let temp_dir = TempDir::new().unwrap();
         let config_path = temp_dir.path().join("ptui.json");
-        
+
         fs::write(&config_path, "invalid json content").unwrap();
-        
+
         let config = PTuiConfig::create_default_config(&config_path).unwrap();
         assert_eq!(config.converter.selected, "chafa");
         assert_eq!(config.locale, Some("en".to_string()));
@@ -479,9 +479,9 @@ mod tests {
             .join("deep")
             .join("nested")
             .join("ptui.json");
-        
+
         let config = PTuiConfig::create_default_config(&nested_config_path).unwrap();
-        
+
         assert_file_exists(&nested_config_path.to_string_lossy());
         assert_eq!(config.converter.selected, "chafa");
     }
@@ -495,7 +495,7 @@ mod tests {
             format: format.to_string(),
             colors: colors.to_string(),
         };
-        
+
         assert_eq!(config.format, format);
         assert_eq!(config.colors, colors);
     }
@@ -515,7 +515,7 @@ mod tests {
             dither: dither.to_string(),
             chars: chars.clone(),
         };
-        
+
         assert_eq!(config.colors, colors);
         assert_eq!(config.invert, invert);
         assert_eq!(config.dither, dither);

@@ -15,6 +15,7 @@ keys_delete_file = x: 删除当前文件
 keys_open_in_browser = o: 在系统文件浏览器中打开
 keys_slideshow = 空格: 开始/停止幻灯片（仅图像）
 keys_text_scroll = u: 向上滚动文本, 空格: 向下滚动文本
+keys_converter_cycle = Tab: 切换转换器
 keys_help_toggle = ?: 显示帮助
 keys_quit = q/Esc: 退出
 not_supported_file_type = 所选文件不是图像、文本或ASCII文件

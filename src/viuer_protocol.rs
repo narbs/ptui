@@ -249,7 +249,7 @@ impl StatefulProtocol for ViuerKittyProtocol {
         #[cfg(not(test))]
         {
             use std::io::Write;
-        let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
+            let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
             let _ = std::io::stdout().write_all(delete_all_cmd.as_bytes());
             let _ = std::io::stdout().flush();
         }

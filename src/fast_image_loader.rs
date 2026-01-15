@@ -23,10 +23,10 @@ impl FastImageLoader {
             #[cfg(feature = "fast-jpeg")]
             {
                 Self::load_jpeg_turbojpeg(path, target_max_dimension).or_else(|e| {
-                        #[cfg(not(test))]
-                        eprintln!("[TURBOJPEG] Failed: {}, falling back to zune-jpeg", e);
-                        Self::load_jpeg_zune(path, target_max_dimension)
-                    })
+                    #[cfg(not(test))]
+                    eprintln!("[TURBOJPEG] Failed: {}, falling back to zune-jpeg", e);
+                    Self::load_jpeg_zune(path, target_max_dimension)
+                })
             }
             #[cfg(not(feature = "fast-jpeg"))]
             {
@@ -93,13 +93,13 @@ impl FastImageLoader {
         // Calculate optimal scaling factor for turbojpeg
         // turbojpeg supports 1, 1/2, 1/4, 1/8 during decompression (INSTANT!)
         let scaling_factor = if max_original > (target_max_dimension * 8) as usize {
-            ScalingFactor::ONE_EIGHTH  // Decode at 1/8 size
+            ScalingFactor::ONE_EIGHTH // Decode at 1/8 size
         } else if max_original > (target_max_dimension * 4) as usize {
-            ScalingFactor::ONE_QUARTER  // Decode at 1/4 size
+            ScalingFactor::ONE_QUARTER // Decode at 1/4 size
         } else if max_original > (target_max_dimension * 2) as usize {
-            ScalingFactor::ONE_HALF  // Decode at 1/2 size
+            ScalingFactor::ONE_HALF // Decode at 1/2 size
         } else {
-            ScalingFactor::ONE  // Full size
+            ScalingFactor::ONE // Full size
         };
 
         #[cfg(not(test))]
@@ -151,7 +151,7 @@ impl FastImageLoader {
         // Convert to DynamicImage
         let img_buffer =
             image::RgbImage::from_raw(output_width as u32, output_height as u32, output_buf)
-            .ok_or_else(|| "Failed to create image buffer".to_string())?;
+                .ok_or_else(|| "Failed to create image buffer".to_string())?;
 
         Ok(DynamicImage::ImageRgb8(img_buffer))
     }

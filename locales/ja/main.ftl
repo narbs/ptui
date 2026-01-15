@@ -15,6 +15,7 @@ keys_delete_file = x: 現在のファイルを削除
 keys_open_in_browser = o: システムファイルブラウザで開く
 keys_slideshow = スペース: スライドショー開始/停止（画像のみ）
 keys_text_scroll = u: テキスト上スクロール, スペース: テキスト下スクロール
+keys_converter_cycle = Tab: 変換器を切り替える
 keys_help_toggle = ?: ヘルプを表示
 keys_quit = q/Esc: 終了
 not_supported_file_type = 選択されたファイルは画像、テキスト、またはASCIIファイルではありません

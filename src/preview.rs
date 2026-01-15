@@ -22,7 +22,7 @@ pub enum TerminalGraphicsSupport {
     Kitty,
     Iterm2,
     #[allow(dead_code)]
-    Sixel,  // Reserved for future Sixel support
+    Sixel, // Reserved for future Sixel support
     None, // Fallback to text mode (chafa)
 }
 
@@ -43,19 +43,20 @@ pub struct GraphicalPreview {
     pub img_height: u32, // Actual image pixel height
     pub protocol: Box<dyn StatefulProtocol>,
     pub protocol_type: TerminalGraphicsSupport, // Track which protocol is being used
-    pub font_size: (u16, u16), // Font size for iTerm2 cell calculations
+    pub font_size: (u16, u16),                  // Font size for iTerm2 cell calculations
 }
 
 pub struct PreviewManager {
     cache: HashMap<String, PreviewContent>,
     cache_order: Vec<String>, // Track insertion order for LRU eviction
     max_cache_size: usize,
-    converter: Box<dyn AsciiConverter>,
+    pub converter: Box<dyn AsciiConverter>,
     pub graphical_max_dimension: u32,
     pub debug_info: String,
     graphics_support: TerminalGraphicsSupport,
     picker: Option<Picker>, // For creating terminal-specific image protocols
-    font_size: (u16, u16), // Cached font size (width, height) in pixels
+    font_size: (u16, u16),  // Cached font size (width, height) in pixels
+    pub config: PTuiConfig,     // Store the config for converter switching
 }
 
 impl PreviewManager {
@@ -93,6 +94,7 @@ impl PreviewManager {
             graphics_support,
             picker,
             font_size,
+            config, // Store the config for later use in converter switching
         }
     }
 
@@ -198,7 +200,7 @@ impl PreviewManager {
 
         // Conservative font size estimate (optimized for speed)
         // Smaller estimates = faster encoding, still looks good in terminal
-        let estimated_char_width = 8;   // pixels (conservative)
+        let estimated_char_width = 8; // pixels (conservative)
         let estimated_char_height = 16; // pixels (conservative)
 
         // Preview pane typically uses 70-85% of terminal width
@@ -339,14 +341,14 @@ impl PreviewManager {
         localization: &Localization,
     ) -> PreviewContent {
         let cache_key = format!("{}:{}x{}", path, width, height);
-        
+
         if let Some(cached) = self.cache.get(&cache_key) {
             return cached.clone();
         }
 
         let (converter_width, converter_height) =
             self.calculate_converter_dimensions(path, width, height, localization);
-        
+
         // Check if converter is graphical AND terminal supports graphics
         let result = if self.converter.is_graphical()
             && self.graphics_support != TerminalGraphicsSupport::None
@@ -604,12 +606,12 @@ impl PreviewManager {
             Ok(file) => {
                 let reader = BufReader::new(file);
                 let mut all_lines: Vec<String> = Vec::new();
-                
+
                 // Read all lines first
                 for line in reader.lines() {
                     if let Ok(content) = line {
                         all_lines.push(content);
-                        
+
                         // Still limit total lines to prevent excessive memory usage
                         if all_lines.len() > 10000 {
                             all_lines.push(
@@ -623,7 +625,7 @@ impl PreviewManager {
                         break;
                     }
                 }
-                
+
                 // Apply scroll offset and visible height
                 let display_lines = if scroll_offset >= all_lines.len() {
                     // If scrolled past the end, show "end of file" message
@@ -633,7 +635,7 @@ impl PreviewManager {
                     let end_line = (scroll_offset + visible_height as usize).min(all_lines.len());
                     all_lines[scroll_offset..end_line].to_vec()
                 };
-                
+
                 Text::from(display_lines.join("\n"))
             }
             Err(_) => Text::from("Error: Could not open file"),
@@ -648,7 +650,7 @@ impl PreviewManager {
         localization: &Localization,
     ) -> (u16, u16) {
         let (img_width, img_height) = ImageDimensions::get_dimensions(path);
-        
+
         self.debug_info = format!(
             "{}{}",
             localization.get("image_file_prefix"),
@@ -657,7 +659,7 @@ impl PreviewManager {
                 .unwrap_or_default()
                 .to_string_lossy()
         );
-        
+
         if img_width == 0 || img_height == 0 {
             self.debug_info = format!("{} | Using fallback dimensions", self.debug_info);
             return (max_width, max_height);
@@ -666,17 +668,17 @@ impl PreviewManager {
         let char_aspect_ratio_height = 3.0;
         let effective_max_width = max_width;
         let effective_max_height = max_height;
-        
+
         let img_aspect_ratio = img_width as f32 / img_height as f32;
-        
+
         let width_constrained_width = effective_max_width;
         let width_constrained_height = ((width_constrained_width as f32) / img_aspect_ratio) as u16;
-        
+
         let height_constrained_height = effective_max_height;
         let height_constrained_width = ((height_constrained_height as f32)
             * img_aspect_ratio
             * char_aspect_ratio_height) as u16;
-        
+
         let (final_width, final_height) = if width_constrained_height <= effective_max_height {
             (width_constrained_width, width_constrained_height)
         } else {
@@ -685,15 +687,15 @@ impl PreviewManager {
                 height_constrained_height,
             )
         };
-        
+
         (final_width, final_height)
     }
 
     fn render_with_converter(&mut self, path: &str, width: u16, height: u16) -> Text<'static> {
         match self.converter.convert_image(path, width, height) {
             Ok(output) => match output.as_bytes().into_text() {
-                    Ok(text) => text,
-                    Err(_) => Text::from("Failed to parse ANSI output"),
+                Ok(text) => text,
+                Err(_) => Text::from("Failed to parse ANSI output"),
             },
             Err(e) => {
                 self.debug_info = format!("{} error: {}", self.converter.get_name(), e);
@@ -723,40 +725,40 @@ impl ImageDimensions {
             .output()
             && output.status.success()
         {
-                let output_str = String::from_utf8_lossy(&output.stdout);
-                let parts: Vec<&str> = output_str.split_whitespace().collect();
-                if parts.len() >= 2
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let parts: Vec<&str> = output_str.split_whitespace().collect();
+            if parts.len() >= 2
                 && let (Ok(w), Ok(h)) = (parts[0].parse::<u32>(), parts[1].parse::<u32>())
             {
-                        return (w, h);
-                    }
+                return (w, h);
             }
-        
+        }
+
         if let Ok(output) = Command::new("file").arg(path).output()
             && output.status.success()
         {
-                let output_str = String::from_utf8_lossy(&output.stdout);
-                if let Some(dimensions) = Self::extract_dimensions_from_file_output(&output_str) {
-                    return dimensions;
-                }
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            if let Some(dimensions) = Self::extract_dimensions_from_file_output(&output_str) {
+                return dimensions;
             }
-        
+        }
+
         (800, 600) // Default fallback
     }
 
     fn extract_dimensions_from_file_output(output: &str) -> Option<(u32, u32)> {
         let words: Vec<&str> = output.split_whitespace().collect();
-        
+
         // First try: look for "width x height" pattern
         for i in 0..words.len().saturating_sub(2) {
             if let Ok(w) = words[i].parse::<u32>()
                 && words.get(i + 1).is_some_and(|s| *s == "x" || *s == "×")
                 && let Some(h) = words.get(i + 2).and_then(|s| s.parse::<u32>().ok())
             {
-                        return Some((w, h));
-                    }
+                return Some((w, h));
+            }
         }
-        
+
         // Second try: look for "widthxheight" in single words
         for word in &words {
             if let Some(x_pos) = word.find('x') {
@@ -766,7 +768,7 @@ impl ImageDimensions {
                     return Some((w, h));
                 }
             }
-            
+
             if let Some(x_pos) = word.find('×') {
                 let (w_str, h_str) = word.split_at(x_pos);
                 let h_str = &h_str[3..]; // Remove the '×' (3 bytes in UTF-8)
@@ -775,7 +777,7 @@ impl ImageDimensions {
                 }
             }
         }
-        
+
         None
     }
 }
@@ -790,7 +792,7 @@ mod tests {
     fn test_preview_manager_creation() {
         let config = create_test_config();
         let manager = PreviewManager::new(config);
-        
+
         assert!(manager.cache.is_empty());
         assert_eq!(manager.debug_info, "");
         assert_eq!(manager.converter.get_name(), "chafa");
@@ -801,9 +803,9 @@ mod tests {
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let file_item = create_test_image_file_item("test");
-        
+
         manager.remove_from_cache(&file_item, 80, 24);
-        
+
         manager.clear_cache();
         assert!(manager.cache.is_empty());
     }
@@ -814,9 +816,9 @@ mod tests {
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
         let dir_item = create_test_directory_item("test_dir");
-        
+
         let preview = manager.generate_preview(&dir_item, 80, 24, 0, &localization);
-        
+
         assert_eq!(manager.debug_info, localization.get("directory_selected"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
@@ -830,20 +832,20 @@ mod tests {
         let file_path = temp_fs
             .create_file("test.txt", "Line 1\nLine 2\nLine 3")
             .unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let file_item = FileItem::new(
             "test.txt".to_string(),
             file_path,
             false,
             std::time::UNIX_EPOCH,
         );
-        
+
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
-        
+
         assert!(manager.debug_info.contains("test.txt"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
@@ -856,20 +858,20 @@ mod tests {
         let temp_fs = TestFileSystem::new().unwrap();
         let ascii_content = "\x1b[31mRed\x1b[0m \x1b[32mGreen\x1b[0m";
         let file_path = temp_fs.create_file("test.ascii", ascii_content).unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let file_item = FileItem::new(
             "test.ascii".to_string(),
             file_path,
             false,
             std::time::UNIX_EPOCH,
         );
-        
+
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
-        
+
         assert!(manager.debug_info.contains("test.ascii"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
@@ -883,9 +885,9 @@ mod tests {
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
         let unsupported_item = create_test_file_item("test.xyz", false);
-        
+
         let preview = manager.generate_preview(&unsupported_item, 80, 24, 0, &localization);
-        
+
         assert_eq!(
             manager.debug_info,
             localization.get("file_type_not_supported")
@@ -900,24 +902,24 @@ mod tests {
     fn test_preview_manager_image_caching() {
         let temp_fs = TestFileSystem::new().unwrap();
         let image_path = temp_fs.create_test_image("test.jpg").unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let file_item = FileItem::new(
             "test.jpg".to_string(),
             image_path,
             false,
             std::time::UNIX_EPOCH,
         );
-        
+
         let _ = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         let cache_size_after_first = manager.cache.len();
-        
+
         let _ = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         let cache_size_after_second = manager.cache.len();
-        
+
         assert_eq!(cache_size_after_first, cache_size_after_second);
     }
 
@@ -925,20 +927,20 @@ mod tests {
     fn test_preview_manager_save_ascii_to_file() {
         let temp_fs = TestFileSystem::new().unwrap();
         let image_path = temp_fs.create_test_image("source.jpg").unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let file_item = FileItem::new(
             "source.jpg".to_string(),
             image_path,
             false,
             std::time::UNIX_EPOCH,
         );
-        
+
         let result = manager.save_ascii_to_file(&file_item, 80, 24, &localization);
-        
+
         match result {
             Ok(message) => {
                 assert!(message.contains(localization.get("saved_to").as_str()));
@@ -955,9 +957,9 @@ mod tests {
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
         let text_item = create_test_text_file_item("document");
-        
+
         let result = manager.save_ascii_to_file(&text_item, 80, 24, &localization);
-        
+
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("not an image"));
     }
@@ -972,18 +974,18 @@ mod tests {
         let file_path = temp_fs
             .create_file("scrollable.txt", &test_content)
             .unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let file_item = FileItem::new(
             "scrollable.txt".to_string(),
             file_path,
             false,
             std::time::UNIX_EPOCH,
         );
-        
+
         // Test scrolling from the beginning (scroll_offset = 0)
         let preview1 = manager.generate_preview(&file_item, 80, 10, 0, &localization);
         let content1 = match preview1 {
@@ -996,11 +998,11 @@ mod tests {
                         .map(|span| span.content.as_ref())
                         .collect::<String>()
                 })
-            .collect::<Vec<_>>()
+                .collect::<Vec<_>>()
                 .join("\n"),
             PreviewContent::Graphical(_) => panic!("Expected text preview"),
         };
-        
+
         // Test scrolling with offset
         let preview2 = manager.generate_preview(&file_item, 80, 10, 5, &localization);
         let content2 = match preview2 {
@@ -1013,16 +1015,16 @@ mod tests {
                         .map(|span| span.content.as_ref())
                         .collect::<String>()
                 })
-            .collect::<Vec<_>>()
+                .collect::<Vec<_>>()
                 .join("\n"),
             PreviewContent::Graphical(_) => panic!("Expected text preview"),
         };
-        
+
         // The first preview should start with "Line 0"
         assert!(content1.contains("Line 0"));
         // With height=10, we should only see lines 0-9, not line 10 or higher
         assert!(!content1.contains("Line 10"));
-        
+
         // The second preview should start with "Line 5" due to scroll offset
         assert!(content2.contains("Line 5"));
         assert!(!content2.contains("Line 0"));
@@ -1037,18 +1039,18 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let file_path = temp_fs.create_file("large.txt", &large_content).unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let file_item = FileItem::new(
             "large.txt".to_string(),
             file_path,
             false,
             std::time::UNIX_EPOCH,
         );
-        
+
         // Test with a large height parameter to see if limit is reached
         let preview = manager.generate_preview(&file_item, 80, 15000, 0, &localization);
         let content = match preview {
@@ -1061,11 +1063,11 @@ mod tests {
                         .map(|span| span.content.as_ref())
                         .collect::<String>()
                 })
-            .collect::<Vec<_>>()
+                .collect::<Vec<_>>()
                 .join("\n"),
             PreviewContent::Graphical(_) => panic!("Expected text preview"),
         };
-        
+
         // Should show the limit message since we have more than 10000 lines
         assert!(content.contains("file too large for scrolling"));
     }
@@ -1082,16 +1084,16 @@ mod tests {
         let output_with_x_separator = "test.jpg: JPEG image data 1920 x 1080 quality 85%";
         let result = ImageDimensions::extract_dimensions_from_file_output(output_with_x_separator);
         assert_eq!(result, Some((1920, 1080)));
-        
+
         let output_without_dimensions = "test.jpg: ASCII text";
         let result =
             ImageDimensions::extract_dimensions_from_file_output(output_without_dimensions);
         assert_eq!(result, None);
-        
+
         let output_with_unicode_x = "test.jpg: PNG image data 800 × 600 8-bit/color RGBA";
         let result = ImageDimensions::extract_dimensions_from_file_output(output_with_unicode_x);
         assert_eq!(result, Some((800, 600)));
-        
+
         let output_with_compact_format = "test.jpg: JPEG 1920x1080 24-bit";
         let result =
             ImageDimensions::extract_dimensions_from_file_output(output_with_compact_format);
@@ -1102,7 +1104,7 @@ mod tests {
     fn test_preview_manager_debug_info() {
         let config = create_test_config();
         let manager = PreviewManager::new(config);
-        
+
         assert_eq!(manager.get_debug_info(), "");
     }
 
@@ -1110,12 +1112,12 @@ mod tests {
     fn test_preview_manager_set_message() {
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
-        
+
         assert_eq!(manager.get_debug_info(), "");
-        
+
         manager.set_message("Test message".to_string());
         assert_eq!(manager.get_debug_info(), "Test message");
-        
+
         manager.set_message("Another message".to_string());
         assert_eq!(manager.get_debug_info(), "Another message");
     }
@@ -1125,9 +1127,9 @@ mod tests {
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let file_item = create_test_image_file_item("test");
-        
+
         manager.remove_from_cache(&file_item, 100, 50);
-        
+
         assert!(manager.cache.is_empty());
     }
 
@@ -1135,14 +1137,14 @@ mod tests {
     fn test_preview_manager_calculate_converter_dimensions() {
         let temp_fs = TestFileSystem::new().unwrap();
         let image_path = temp_fs.create_test_image("test.jpg").unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let (width, height) =
             manager.calculate_converter_dimensions(&image_path, 80, 24, &localization);
-        
+
         assert!(width > 0);
         assert!(height > 0);
         assert!(width <= 80);
@@ -1156,18 +1158,18 @@ mod tests {
     fn test_preview_manager_image_extensions(#[case] ext: &str) {
         let temp_fs = TestFileSystem::new().unwrap();
         let image_path = temp_fs.create_test_image(&format!("test.{}", ext)).unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let file_item = FileItem::new(
             format!("test.{}", ext),
             image_path,
             false,
             std::time::UNIX_EPOCH,
         );
-        
+
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
@@ -1181,18 +1183,18 @@ mod tests {
     fn test_preview_manager_empty_file() {
         let temp_fs = TestFileSystem::new().unwrap();
         let file_path = temp_fs.create_file("empty.txt", "").unwrap();
-        
+
         let config = create_test_config();
         let mut manager = PreviewManager::new(config);
         let localization = Localization::new("en").unwrap();
-        
+
         let file_item = FileItem::new(
             "empty.txt".to_string(),
             file_path,
             false,
             std::time::UNIX_EPOCH,
         );
-        
+
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),

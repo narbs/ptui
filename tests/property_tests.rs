@@ -15,17 +15,17 @@ proptest! {
         } else {
             name
         };
-        
+
         let file_item = file_browser::FileItem::new(
             filename.clone(),
             format!("/path/{}", filename),
             is_dir,
             UNIX_EPOCH,
         );
-        
+
         prop_assert_eq!(&file_item.name, &filename);
         prop_assert_eq!(file_item.is_directory, is_dir);
-        
+
         if is_dir {
             prop_assert!(!file_item.is_image());
             prop_assert!(!file_item.is_text_file());
@@ -40,16 +40,16 @@ proptest! {
     ) {
         let mut layout = ui::UILayout::new();
         let area = ratatui::layout::Rect::new(0, 0, width, height);
-        
+
         let (file_area, preview_area, debug_area) = layout.calculate_layout(area);
-        
+
         prop_assert!(file_area.width > 0);
         prop_assert!(preview_area.width > 0);
         prop_assert!(debug_area.height > 0);
-        
+
         prop_assert_eq!(file_area.width + preview_area.width, width);
         prop_assert_eq!(file_area.height + debug_area.height, height);
-        
+
         prop_assert!(layout.preview_width <= preview_area.width);
         prop_assert!(layout.preview_height <= preview_area.height);
     }
@@ -77,10 +77,10 @@ proptest! {
             slideshow_transitions: Some(config::SlideshowTransitionConfig::default()),
             chafa: None,
         };
-        
+
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: config::PTuiConfig = serde_json::from_str(&json).unwrap();
-        
+
         prop_assert_eq!(deserialized.converter.chafa.format, format);
         prop_assert_eq!(deserialized.converter.chafa.colors, colors);
         prop_assert_eq!(deserialized.converter.selected, converter_selected);
@@ -95,30 +95,30 @@ proptest! {
         max_visible in 5usize..50usize,
     ) {
         use tempfile::TempDir;
-        
+
         let temp_dir = TempDir::new().unwrap();
         for i in 0..file_count {
             std::fs::write(temp_dir.path().join(format!("file{}.txt", i)), "content").unwrap();
         }
-        
+
         let mut browser = file_browser::FileBrowser::new_with_dir(temp_dir.path()).unwrap();
         browser.update_max_visible_files(max_visible);
-        
+
         let safe_index = selected_index % browser.files.len();
         browser.set_selected_index(safe_index);
-        
+
         prop_assert!(browser.selected_index < browser.files.len());
         prop_assert!(browser.scroll_offset <= browser.files.len());
-        
+
         browser.move_up();
         prop_assert!(browser.selected_index < browser.files.len());
-        
+
         browser.move_down();
         prop_assert!(browser.selected_index < browser.files.len());
-        
+
         browser.page_up();
         prop_assert!(browser.selected_index < browser.files.len());
-        
+
         browser.page_down();
         prop_assert!(browser.selected_index < browser.files.len());
     }
@@ -132,16 +132,16 @@ proptest! {
         let mut layout = ui::UILayout::new();
         layout.preview_size = initial_size;
         layout.min_divider_percent = min_divider;
-        
+
         let max_size = 100 - min_divider;
-        
+
         if layout.can_increase_size() {
             let old_size = layout.preview_size;
             layout.increase_size(increment);
             prop_assert!(layout.preview_size >= old_size);
             prop_assert!(layout.preview_size <= max_size);
         }
-        
+
         if layout.can_decrease_size() {
             let old_size = layout.preview_size;
             layout.decrease_size(increment);
@@ -175,9 +175,9 @@ proptest! {
             },
             ..Default::default()
         };
-        
+
         let converter = converter::create_converter(&config);
-        
+
         match selected.as_str() {
             "jp2a" => prop_assert_eq!(converter.get_name(), "jp2a"),
             _ => prop_assert_eq!(converter.get_name(), "chafa"), // chafa is default fallback
@@ -189,17 +189,17 @@ proptest! {
         path_segments in prop::collection::vec("[a-zA-Z0-9]{1,20}", 1..10),
     ) {
         use tempfile::TempDir;
-        
+
         let long_path = format!("/{}", path_segments.join("/"));
-        
+
         let temp_dir = TempDir::new().unwrap();
         let mut browser = file_browser::FileBrowser::new_with_dir(temp_dir.path()).unwrap();
         browser.current_dir = long_path.clone();
-        
+
         let display = browser.get_current_dir_display();
-        
+
         prop_assert!(display.len() <= 30, "Display should be truncated to 30 chars or less");
-        
+
         if long_path.len() > 30 {
             prop_assert!(display.starts_with("..."), "Long paths should be truncated with ...");
         } else {
@@ -215,9 +215,9 @@ proptest! {
             slideshow_delay_ms: delay_ms,
             ..Default::default()
         };
-        
+
         let actual_delay = config.get_slideshow_delay_ms();
-        
+
         match delay_ms {
             Some(ms) => prop_assert_eq!(actual_delay, ms),
             None => prop_assert_eq!(actual_delay, 2000), // default value
@@ -232,7 +232,7 @@ proptest! {
         let temp_dir = TempDir::new().unwrap();
         let full_filename = format!("{}.test", filename); // Use generic extension
         let file_path = temp_dir.path().join(&full_filename);
-        
+
         // Create file with appropriate content based on file_type
         match file_type.as_str() {
             "jpeg_image" => {

@@ -15,6 +15,7 @@ keys_delete_file = x: Delete current file
 keys_open_in_browser = o: Open in system file browser
 keys_slideshow = Space: Start/stop slideshow (images only)
 keys_text_scroll = u: Scroll text up, Space: Scroll text down
+keys_converter_cycle = Tab: Cycle converters
 keys_help_toggle = ?: Show help
 keys_quit = q/Esc: Quit
 not_supported_file_type = Selected file is not an image, text file, or ASCII file

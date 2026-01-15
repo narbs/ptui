@@ -44,9 +44,9 @@ impl UILayout {
         } else {
             NARROW_SCREEN_WIDTH_PERCENT
         };
-        
+
         self.min_divider_percent = file_browser_width;
-        
+
         // Initialize preview size on first draw
         if self.preview_size == 0 {
             self.preview_size = file_browser_width;
@@ -58,8 +58,8 @@ impl UILayout {
         let main_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(area.height.saturating_sub(debug_height)),     // Main content area
-                Constraint::Length(debug_height),   // Debug pane
+                Constraint::Min(area.height.saturating_sub(debug_height)), // Main content area
+                Constraint::Length(debug_height),                          // Debug pane
             ])
             .split(area);
 
@@ -145,7 +145,7 @@ impl UIRenderer {
                 } else {
                     format!("🖼️ {}", file.name)
                 };
-                
+
                 let style = if i == file_browser.selected_index && is_selected_highlighted {
                     Style::default()
                         .fg(Color::Yellow)
@@ -153,7 +153,7 @@ impl UIRenderer {
                 } else {
                     Style::default()
                 };
-                
+
                 ListItem::new(content).style(style)
             })
             .collect();
@@ -303,11 +303,11 @@ impl UIRenderer {
                     Some(logo) => {
                         // Start with the logo and localize any placeholders
                         let mut combined = Self::localize_logo_text(logo, localization);
-                        
+
                         // Add spacing between logo and help text
                         combined.lines.push(ratatui::text::Line::from(""));
                         combined.lines.push(ratatui::text::Line::from(""));
-                        
+
                         // Add help text lines
                         let help_text_obj = Text::from(help_text);
                         for line in help_text_obj.lines {
@@ -316,28 +316,28 @@ impl UIRenderer {
                         combined
                     }
                     None => Text::from(help_text),
-        };
+                };
 
-        let preview_block = Block::default()
-            .title(format!("🖼️ {}", localization.get("image_preview")))
-            .borders(Borders::ALL);
+                let preview_block = Block::default()
+                    .title(format!("🖼️ {}", localization.get("image_preview")))
+                    .borders(Borders::ALL);
 
-        let preview_paragraph = Paragraph::new(content)
-            .block(preview_block)
+                let preview_paragraph = Paragraph::new(content)
+                    .block(preview_block)
                     .wrap(Wrap { trim: false })
                     .alignment(Alignment::Left);
 
-        f.render_widget(preview_paragraph, area);
-    }
+                f.render_widget(preview_paragraph, area);
+            }
         }
     }
 
     fn localize_logo_text(logo: &Text<'static>, localization: &Localization) -> Text<'static> {
         let mut localized_logo = Text::default();
-        
+
         for line in &logo.lines {
             let mut new_line = ratatui::text::Line::default();
-            
+
             for span in &line.spans {
                 let content = span.content.to_string();
                 // Replace placeholders with localized subtitle and version
@@ -350,16 +350,16 @@ impl UIRenderer {
                     localized_content =
                         localized_content.replace("{version}", env!("CARGO_PKG_VERSION"));
                 }
-                
+
                 new_line.spans.push(ratatui::text::Span {
                     content: localized_content.into(),
                     style: span.style,
                 });
             }
-            
+
             localized_logo.lines.push(new_line);
         }
-        
+
         localized_logo
     }
 
@@ -393,8 +393,8 @@ impl UIRenderer {
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(1),     // Image area
-                Constraint::Length(3),  // Status bar
+                Constraint::Min(1),    // Image area
+                Constraint::Length(3), // Status bar
             ])
             .split(area);
 
@@ -414,44 +414,44 @@ impl UIRenderer {
                 use crate::preview::TerminalGraphicsSupport;
                 let centered_area =
                     if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
-                    // iTerm2: Calculate exact cell dimensions
-                    let font_width = graphical_borrow.font_size.0 as u32;
-                    let font_height = graphical_borrow.font_size.1 as u32;
+                        // iTerm2: Calculate exact cell dimensions
+                        let font_width = graphical_borrow.font_size.0 as u32;
+                        let font_height = graphical_borrow.font_size.1 as u32;
 
                         let needed_width_cells =
                             ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
                         let needed_height_cells =
                             ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
 
-                    let width = needed_width_cells.min(chunks[0].width);
-                    let height = needed_height_cells.min(chunks[0].height);
+                        let width = needed_width_cells.min(chunks[0].width);
+                        let height = needed_height_cells.min(chunks[0].height);
 
-                    let x_offset = (chunks[0].width.saturating_sub(width)) / 2;
-                    let y_offset = (chunks[0].height.saturating_sub(height)) / 2;
+                        let x_offset = (chunks[0].width.saturating_sub(width)) / 2;
+                        let y_offset = (chunks[0].height.saturating_sub(height)) / 2;
 
-                    Rect {
-                        x: chunks[0].x + x_offset,
-                        y: chunks[0].y + y_offset,
-                        width,
-                        height,
-                    }
-                } else {
-                    // Kitty/Ghostty: Use actual font metrics for aspect ratio compensation
-                    let font_width = graphical_borrow.font_size.0 as f32;
-                    let font_height = graphical_borrow.font_size.1 as f32;
+                        Rect {
+                            x: chunks[0].x + x_offset,
+                            y: chunks[0].y + y_offset,
+                            width,
+                            height,
+                        }
+                    } else {
+                        // Kitty/Ghostty: Use actual font metrics for aspect ratio compensation
+                        let font_width = graphical_borrow.font_size.0 as f32;
+                        let font_height = graphical_borrow.font_size.1 as f32;
                         let char_aspect = if font_width > 0.0 {
                             font_height / font_width
                         } else {
                             2.0
                         };
 
-                    Self::calculate_centered_image_area_with_aspect(
-                        chunks[0],
-                        graphical_borrow.img_width,
-                        graphical_borrow.img_height,
-                        char_aspect,
-                    )
-                };
+                        Self::calculate_centered_image_area_with_aspect(
+                            chunks[0],
+                            graphical_borrow.img_width,
+                            graphical_borrow.img_height,
+                            char_aspect,
+                        )
+                    };
 
                 let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
                 f.render_stateful_widget(
@@ -462,10 +462,10 @@ impl UIRenderer {
             }
             None => {
                 let content = Text::from(localization.get("no_file_selected"));
-        let image_paragraph = Paragraph::new(content)
-            .block(Block::default().borders(Borders::NONE))
-            .alignment(Alignment::Center);
-        f.render_widget(image_paragraph, chunks[0]);
+                let image_paragraph = Paragraph::new(content)
+                    .block(Block::default().borders(Borders::NONE))
+                    .alignment(Alignment::Center);
+                f.render_widget(image_paragraph, chunks[0]);
             }
         }
 
@@ -509,7 +509,7 @@ impl UIRenderer {
         // Calculate centered dialog position
         let dialog_width = 50.min(area.width.saturating_sub(4));
         let dialog_height = 5.min(area.height.saturating_sub(4));
-        
+
         let popup_area = centered_rect(dialog_width, dialog_height, area);
 
         // Clear the area where the dialog will be rendered
@@ -599,9 +599,9 @@ mod tests {
     fn test_ui_layout_calculate_layout_wide_screen() {
         let mut layout = UILayout::new();
         let area = Rect::new(0, 0, 150, 50);
-        
+
         let (file_area, preview_area, debug_area) = layout.calculate_layout(area);
-        
+
         assert_eq!(layout.min_divider_percent, WIDE_SCREEN_WIDTH_PERCENT);
         assert!(file_area.width > 0);
         assert!(preview_area.width > 0);
@@ -613,9 +613,9 @@ mod tests {
     fn test_ui_layout_calculate_layout_narrow_screen() {
         let mut layout = UILayout::new();
         let area = Rect::new(0, 0, 80, 30);
-        
+
         let (file_area, preview_area, debug_area) = layout.calculate_layout(area);
-        
+
         assert_eq!(layout.min_divider_percent, NARROW_SCREEN_WIDTH_PERCENT);
         assert!(file_area.width > 0);
         assert!(preview_area.width > 0);
@@ -626,11 +626,11 @@ mod tests {
     fn test_ui_layout_preview_size_initialization() {
         let mut layout = UILayout::new();
         let area = Rect::new(0, 0, 100, 40);
-        
+
         assert_eq!(layout.preview_size, 0);
-        
+
         layout.calculate_layout(area);
-        
+
         assert!(layout.preview_size > 0);
         assert_eq!(layout.preview_size, layout.min_divider_percent);
     }
@@ -640,9 +640,9 @@ mod tests {
         let mut layout = UILayout::new();
         layout.preview_size = 50;
         layout.min_divider_percent = 10;
-        
+
         assert!(layout.can_increase_size());
-        
+
         layout.preview_size = 90;
         assert!(!layout.can_increase_size());
     }
@@ -652,9 +652,9 @@ mod tests {
         let mut layout = UILayout::new();
         layout.preview_size = 50;
         layout.min_divider_percent = 10;
-        
+
         assert!(layout.can_decrease_size());
-        
+
         layout.preview_size = 10;
         assert!(!layout.can_decrease_size());
     }
@@ -664,10 +664,10 @@ mod tests {
         let mut layout = UILayout::new();
         layout.preview_size = 30;
         layout.min_divider_percent = 10;
-        
+
         layout.increase_size(20);
         assert_eq!(layout.preview_size, 50);
-        
+
         layout.increase_size(50);
         assert_eq!(layout.preview_size, 90);
     }
@@ -677,10 +677,10 @@ mod tests {
         let mut layout = UILayout::new();
         layout.preview_size = 50;
         layout.min_divider_percent = 10;
-        
+
         layout.decrease_size(20);
         assert_eq!(layout.preview_size, 30);
-        
+
         layout.decrease_size(50);
         assert_eq!(layout.preview_size, 10);
     }
@@ -690,10 +690,10 @@ mod tests {
         let mut layout = UILayout::new();
         layout.min_divider_percent = 15;
         layout.preview_size = 50;
-        
+
         layout.increase_size(100);
         assert_eq!(layout.preview_size, 85);
-        
+
         layout.decrease_size(100);
         assert_eq!(layout.preview_size, 15);
     }
@@ -702,9 +702,9 @@ mod tests {
     fn test_ui_layout_preview_dimensions_calculation() {
         let mut layout = UILayout::new();
         let area = Rect::new(0, 0, 120, 40);
-        
+
         let (_, preview_area, _) = layout.calculate_layout(area);
-        
+
         assert_eq!(layout.preview_width, preview_area.width.saturating_sub(2));
         assert_eq!(layout.preview_height, preview_area.height.saturating_sub(1));
     }
@@ -718,26 +718,26 @@ mod tests {
     fn test_ui_layout_screen_width_logic(#[case] width: u16, #[case] expected_percent: u16) {
         let mut layout = UILayout::new();
         let area = Rect::new(0, 0, width, 40);
-        
+
         layout.calculate_layout(area);
-        
+
         assert_eq!(layout.min_divider_percent, expected_percent);
     }
 
     #[test]
     fn test_ui_renderer_file_browser_empty() {
         let temp_fs = TestFileSystem::new().unwrap();
-        
+
         let mut file_browser =
             crate::file_browser::FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
         let area = Rect::new(0, 0, 50, 20);
-        
+
         let backend = ratatui::backend::TestBackend::new(50, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        
+
         terminal
             .draw(|f| {
-            UIRenderer::render_file_browser(f, area, &mut file_browser, true);
+                UIRenderer::render_file_browser(f, area, &mut file_browser, true);
             })
             .unwrap();
     }
@@ -749,13 +749,13 @@ mod tests {
         let text = Text::from("Test preview content");
         let preview = PreviewContent::Text(text);
         let area = Rect::new(0, 0, 50, 20);
-        
+
         let backend = ratatui::backend::TestBackend::new(50, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        
+
         terminal
             .draw(|f| {
-            UIRenderer::render_preview(f, area, Some(&preview), &localization, None);
+                UIRenderer::render_preview(f, area, Some(&preview), &localization, None);
             })
             .unwrap();
     }
@@ -764,13 +764,13 @@ mod tests {
     fn test_ui_renderer_preview_without_content() {
         let localization = crate::localization::Localization::new("en").unwrap();
         let area = Rect::new(0, 0, 50, 20);
-        
+
         let backend = ratatui::backend::TestBackend::new(50, 20);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        
+
         terminal
             .draw(|f| {
-            UIRenderer::render_preview(f, area, None, &localization, None);
+                UIRenderer::render_preview(f, area, None, &localization, None);
             })
             .unwrap();
     }
@@ -780,13 +780,13 @@ mod tests {
         let localization = crate::localization::Localization::new("en").unwrap();
         let debug_info = "Test debug information";
         let area = Rect::new(0, 0, 50, 5);
-        
+
         let backend = ratatui::backend::TestBackend::new(50, 5);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        
+
         terminal
             .draw(|f| {
-            UIRenderer::render_debug_pane(f, area, debug_info, &localization);
+                UIRenderer::render_debug_pane(f, area, debug_info, &localization);
             })
             .unwrap();
     }
@@ -798,13 +798,13 @@ mod tests {
         let text = Text::from("Slideshow content");
         let preview = PreviewContent::Text(text);
         let area = Rect::new(0, 0, 80, 30);
-        
+
         let backend = ratatui::backend::TestBackend::new(80, 30);
         let mut terminal = ratatui::Terminal::new(backend).unwrap();
-        
+
         terminal
             .draw(|f| {
-            UIRenderer::render_slideshow(f, area, Some(&preview), &localization, 3, 10);
+                UIRenderer::render_slideshow(f, area, Some(&preview), &localization, 3, 10);
             })
             .unwrap();
     }
@@ -817,9 +817,9 @@ mod tests {
             .push(ratatui::text::Line::from(vec![ratatui::text::Span::from(
                 "Test {app_subtitle} v{version} Logo",
             )]));
-        
+
         let localized = UIRenderer::localize_logo_text(&logo, &localization);
-        
+
         let content = &localized.lines[0].spans[0].content;
         assert!(content.contains(&localization.get("app_subtitle")));
         assert!(!content.contains("{app_subtitle}"));
@@ -831,9 +831,9 @@ mod tests {
     fn test_ui_layout_constraints_consistency() {
         let mut layout = UILayout::new();
         let area = Rect::new(0, 0, 100, 50);
-        
+
         let (file_area, preview_area, debug_area) = layout.calculate_layout(area);
-        
+
         assert_eq!(file_area.y, 0);
         assert_eq!(preview_area.y, 0);
         assert_eq!(debug_area.y, file_area.height);
@@ -845,9 +845,9 @@ mod tests {
     fn test_ui_layout_minimum_dimensions() {
         let mut layout = UILayout::new();
         let small_area = Rect::new(0, 0, 10, 15);
-        
+
         let (file_area, preview_area, debug_area) = layout.calculate_layout(small_area);
-        
+
         assert!(file_area.width > 0);
         assert!(preview_area.width > 0);
         assert!(debug_area.height > 0);

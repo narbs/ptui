@@ -38,11 +38,11 @@ impl ChafaConverter {
 impl AsciiConverter for ChafaConverter {
     fn convert_image(&self, path: &str, width: u16, height: u16) -> Result<String, String> {
         let args = vec![
-            "-f".to_string(), 
+            "-f".to_string(),
             self.config.format.clone(),
-            "-c".to_string(), 
+            "-c".to_string(),
             self.config.colors.clone(),
-            "--size".to_string(), 
+            "--size".to_string(),
             format!("{}x{}", width, height),
             path.to_string(),
         ];
@@ -100,7 +100,7 @@ impl AsciiConverter for Jp2aConverter {
 
         // jp2a doesn't have a --dither option, but it has other options
         // We'll ignore the dither setting for jp2a
-        
+
         if let Some(ref chars) = self.config.chars {
             args.push(format!("--chars={}", chars));
         }
@@ -320,9 +320,9 @@ mod tests {
             colors: "256".to_string(),
         };
         let converter = ChafaConverter::new(config);
-        
+
         let result = converter.convert_image("test.jpg", 80, 24);
-        
+
         match result {
             Ok(_) => {}
             Err(e) => {
@@ -340,9 +340,9 @@ mod tests {
             chars: Some("@%#*".to_string()),
         };
         let converter = Jp2aConverter::new(config);
-        
+
         let result = converter.convert_image("test.jpg", 80, 24);
-        
+
         match result {
             Ok(_) => {}
             Err(e) => {
@@ -365,7 +365,7 @@ mod tests {
             colors: "16".to_string(),
         };
         let converter = ChafaConverter::new(config);
-        
+
         assert_eq!(converter.config.format, "sixel");
         assert_eq!(converter.config.colors, "16");
     }
@@ -379,7 +379,7 @@ mod tests {
             chars: Some("ascii".to_string()),
         };
         let converter = Jp2aConverter::new(config);
-        
+
         assert!(!converter.config.colors);
         assert!(converter.config.invert);
         assert_eq!(converter.config.dither, "floyd");
@@ -397,7 +397,7 @@ mod tests {
             colors: colors.to_string(),
         };
         let converter = ChafaConverter::new(config);
-        
+
         assert_eq!(converter.config.format, format);
         assert_eq!(converter.config.colors, colors);
         assert_eq!(converter.get_name(), "chafa");
@@ -419,7 +419,7 @@ mod tests {
             chars: chars.clone(),
         };
         let converter = Jp2aConverter::new(config);
-        
+
         assert_eq!(converter.config.colors, colors);
         assert_eq!(converter.config.invert, invert);
         assert_eq!(converter.config.chars, chars);

@@ -24,15 +24,15 @@ impl Localization {
             .get(locale)
             .or_else(|| locales_map.get(DEFAULT_LOCALE))
             .ok_or("Locale not found")?;
-            
+
         let resource = FluentResource::try_new(resource_content.to_string())
             .map_err(|e| format!("Failed to load resource: {:?}", e))?;
-            
+
         bundle
             .add_resource(resource)
             .map_err(|e| format!("Failed to add resource: {:?}", e))?;
-            
-        Ok(Self { 
+
+        Ok(Self {
             bundle,
             current_locale: locale.to_string(),
         })
@@ -43,34 +43,34 @@ impl Localization {
         if let Some(message) = self.bundle.get_message(key)
             && let Some(pattern) = message.value()
         {
-                let mut errors = vec![];
+            let mut errors = vec![];
             let value = self
                 .bundle
                 .format_pattern(pattern, Some(&args), &mut errors);
-                return value.to_string();
-            }
+            return value.to_string();
+        }
         key.to_string()
     }
 
     pub fn get_with_args(&self, key: &str, args: Option<&FluentArgs>) -> String {
         let empty_args = FluentArgs::new();
         let args_ref = args.unwrap_or(&empty_args);
-        
+
         if let Some(message) = self.bundle.get_message(key)
             && let Some(pattern) = message.value()
         {
-                let mut errors = vec![];
+            let mut errors = vec![];
             let value = self
                 .bundle
                 .format_pattern(pattern, Some(args_ref), &mut errors);
-                return value.to_string();
-            }
+            return value.to_string();
+        }
         key.to_string()
     }
 
     pub fn get_help_text(&self) -> String {
         format!(
-            "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             self.get("select_image_to_preview"),
             self.get("keys_navigation"),
             self.get("keys_page_navigation"),
@@ -86,6 +86,7 @@ impl Localization {
             self.get("keys_open_in_browser"),
             self.get("keys_slideshow"),
             self.get("keys_text_scroll"),
+            self.get("keys_converter_cycle"),
             self.get("keys_help_toggle"),
             self.get("keys_quit")
         )
@@ -131,13 +132,13 @@ mod tests {
     fn test_localization_help_text_contains_key_info() {
         let localization = Localization::new("en").unwrap();
         let help_text = localization.get_help_text();
-        
+
         assert!(!help_text.is_empty());
         assert!(help_text.contains(&localization.get("keys_navigation")));
         assert!(help_text.contains(&localization.get("keys_quit")));
         assert!(help_text.contains(&localization.get("keys_help_toggle")));
         assert!(help_text.contains(&localization.get("keys_text_scroll")));
-        
+
         // Specifically test that the scrolling keys are mentioned
         assert!(help_text.contains("u: Scroll text up"));
         assert!(help_text.contains("Space: Scroll text down"));
@@ -147,7 +148,7 @@ mod tests {
     fn test_localization_help_text_structure() {
         let localization = Localization::new("en").unwrap();
         let help_text = localization.get_help_text();
-        
+
         let lines: Vec<&str> = help_text.lines().collect();
         assert!(lines.len() >= 10);
     }
@@ -162,7 +163,7 @@ mod tests {
     fn test_localization_supported_locales(#[case] locale: &str) {
         let result = Localization::new(locale);
         assert!(result.is_ok(), "Locale {} should be supported", locale);
-        
+
         let localization = result.unwrap();
         let message = localization.get("select_image_to_preview");
         assert!(
@@ -182,7 +183,7 @@ mod tests {
     #[test]
     fn test_localization_keys_consistency() {
         let localization = Localization::new("en").unwrap();
-        
+
         let expected_keys = [
             "select_image_to_preview",
             "keys_navigation",
@@ -201,7 +202,7 @@ mod tests {
             "keys_help_toggle",
             "keys_quit",
         ];
-        
+
         for key in &expected_keys {
             let message = localization.get(key);
             assert!(!message.is_empty(), "Key {} should have a message", key);
@@ -212,7 +213,7 @@ mod tests {
     #[test]
     fn test_fluent_args_empty() {
         let localization = Localization::new("en").unwrap();
-        
+
         let simple_message = localization.get("keys_quit");
         assert!(!simple_message.is_empty());
     }
@@ -220,10 +221,10 @@ mod tests {
     #[test]
     fn test_localization_bundle_functionality() {
         let localization = Localization::new("en").unwrap();
-        
+
         let message1 = localization.get("keys_navigation");
         let message2 = localization.get("keys_navigation");
-        
+
         assert_eq!(message1, message2);
     }
 }

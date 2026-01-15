@@ -15,6 +15,7 @@ keys_delete_file = x: Eliminar archivo actual
 keys_open_in_browser = o: Abrir en explorador del sistema
 keys_slideshow = Espacio: Iniciar/detener presentación (solo imágenes)
 keys_text_scroll = u: Desplazar texto hacia arriba, Espacio: Desplazar texto hacia abajo
+keys_converter_cycle = Tab: Cambiar convertidores
 keys_help_toggle = ?: Mostrar ayuda
 keys_quit = q/Esc: Salir
 not_supported_file_type = El archivo seleccionado no es una imagen, archivo de texto o archivo ASCII

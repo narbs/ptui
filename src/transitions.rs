@@ -52,7 +52,7 @@ impl TransitionManager {
         self.transition_start_time = Some(Instant::now());
         self.cached_frames.clear();
         self.current_frame_index = 0;
-        
+
         // Pre-render all frames for smooth playback using our simulation
         self.prerender_transition_frames(&to_str);
         true
@@ -67,17 +67,17 @@ impl TransitionManager {
         // Calculate which frame should be displayed based on timing
         if let Some(start_time) = self.transition_start_time {
             let elapsed = start_time.elapsed();
-            
+
             if elapsed >= self.total_transition_duration {
                 // Transition complete
                 self.reset_transition();
                 return None;
             }
-            
+
             let progress =
                 elapsed.as_millis() as f32 / self.total_transition_duration.as_millis() as f32;
             let target_frame = (progress * (self.cached_frames.len() - 1) as f32) as usize;
-            
+
             self.current_frame_index = target_frame.min(self.cached_frames.len().saturating_sub(1));
             self.cached_frames.get(self.current_frame_index)
         } else {
@@ -100,13 +100,13 @@ impl TransitionManager {
     /// Pre-render all animation frames for smooth playback using terani-inspired effects
     fn prerender_transition_frames(&mut self, target_text: &str) {
         self.cached_frames.clear();
-        
+
         // Create multiple frames for smooth animation (simulate terani effects)
         let num_frames = 20; // Configurable number of frames
         for i in 0..=num_frames {
             let progress = i as f32 / num_frames as f32;
             let frame_text = self.create_transition_frame(target_text, progress);
-            
+
             if let Ok(text) = frame_text.into_text() {
                 self.cached_frames.push(text);
             } else {
@@ -166,7 +166,7 @@ impl TransitionManager {
             .map(|line| {
                 line.spans
                     .iter()
-                .map(|span| span.content.as_ref())
+                    .map(|span| span.content.as_ref())
                     .collect::<String>()
             })
             .collect::<Vec<String>>()
@@ -215,10 +215,10 @@ mod tests {
             frame_duration_ms: 50,
         };
         let mut manager = TransitionManager::new(config);
-        
+
         let text1 = Text::from("Hello");
         let text2 = Text::from("World");
-        
+
         let result = manager.start_transition(&text1, &text2);
         assert!(!result);
         assert!(!manager.is_in_transition());
@@ -232,10 +232,10 @@ mod tests {
             frame_duration_ms: 50,
         };
         let mut manager = TransitionManager::new(config);
-        
+
         let text1 = Text::from("Hello");
         let text2 = Text::from("World");
-        
+
         let result = manager.start_transition(&text1, &text2);
         assert!(result);
         assert!(manager.is_in_transition());
@@ -245,7 +245,7 @@ mod tests {
     fn test_text_to_string_simple() {
         let config = SlideshowTransitionConfig::default();
         let manager = TransitionManager::new(config);
-        
+
         let text = Text::from("Hello World");
         let result = manager.text_to_string(&text);
         assert_eq!(result, "Hello World");
@@ -255,7 +255,7 @@ mod tests {
     fn test_text_to_string_multiline() {
         let config = SlideshowTransitionConfig::default();
         let manager = TransitionManager::new(config);
-        
+
         let text = Text::from(vec![Line::from("Line 1"), Line::from("Line 2")]);
         let result = manager.text_to_string(&text);
         assert_eq!(result, "Line 1\nLine 2");
@@ -269,13 +269,13 @@ mod tests {
             frame_duration_ms: 50,
         };
         let mut manager = TransitionManager::new(initial_config);
-        
+
         let new_config = SlideshowTransitionConfig {
             enabled: true,
             effect: "typewriter".to_string(),
             frame_duration_ms: 100,
         };
-        
+
         manager.update_config(new_config.clone());
         assert_eq!(manager.config.enabled, new_config.enabled);
         assert_eq!(manager.config.effect, new_config.effect);
@@ -294,13 +294,13 @@ mod tests {
             frame_duration_ms: 50,
         };
         let mut manager = TransitionManager::new(config);
-        
+
         let text1 = Text::from("Hello");
         let text2 = Text::from("World");
-        
+
         manager.start_transition(&text1, &text2);
         assert!(manager.is_in_transition());
-        
+
         manager.reset_transition();
         assert!(!manager.is_in_transition());
     }
@@ -313,16 +313,16 @@ mod tests {
             frame_duration_ms: 10, // Very fast for testing
         };
         let mut manager = TransitionManager::new(config);
-        
+
         let text1 = Text::from("Hello");
         let text2 = Text::from("World");
-        
+
         manager.start_transition(&text1, &text2);
-        
+
         // Should have frames available initially
         let first_frame = manager.get_current_transition_frame();
         assert!(first_frame.is_some());
-        
+
         // After sufficient time, transition should complete
         std::thread::sleep(std::time::Duration::from_millis(200));
         let final_frame = manager.get_current_transition_frame();
