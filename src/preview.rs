@@ -102,6 +102,28 @@ impl PreviewManager {
 
         #[cfg(not(test))]
         {
+            use std::io::IsTerminal;
+
+            // Skip if stdin is not a TTY (e.g., piped input, CI/CD)
+            if !std::io::stdin().is_terminal() {
+                return (TerminalGraphicsSupport::None, None);
+            }
+
+            // Skip if running under cargo test (integration tests)
+            // Cargo test sets CARGO or the binary name contains "test"
+            if std::env::var("CARGO").is_ok() {
+                if let Ok(exe) = std::env::current_exe() {
+                    if let Some(name) = exe.file_name() {
+                        if name.to_string_lossy().contains("test") {
+                            return (TerminalGraphicsSupport::None, None);
+                        }
+                    }
+                }
+            }
+        }
+
+        #[cfg(not(test))]
+        {
             // Try to create a picker and detect protocol
             match Picker::from_termios() {
                 Ok(mut picker) => {

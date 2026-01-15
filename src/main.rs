@@ -105,7 +105,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     
-    // Cleanup
+    // Cleanup: Clear screen and delete any lingering Kitty protocol images
+    use std::io::Write;
+    // Clear screen first
+    let _ = execute!(terminal.backend_mut(), crossterm::terminal::Clear(crossterm::terminal::ClearType::All));
+    // Delete all Kitty protocol images
+    let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
+    let _ = std::io::stdout().write_all(delete_all_cmd.as_bytes());
+    let _ = std::io::stdout().flush();
+
     disable_raw_mode()?;
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     Ok(())
