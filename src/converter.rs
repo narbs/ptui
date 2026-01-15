@@ -18,7 +18,17 @@ pub struct ChafaConverter {
 }
 
 impl ChafaConverter {
-    pub fn new(config: ChafaConfig) -> Self {
+    pub fn new(mut config: ChafaConfig) -> Self {
+        // macOS Terminal.app doesn't support true color (24-bit), only 256 colors
+        // Detect and adjust to prevent rendering artifacts
+        if let Ok(term_program) = std::env::var("TERM_PROGRAM") {
+            if term_program.contains("Apple_Terminal") && config.colors == "full" {
+                #[cfg(not(test))]
+                eprintln!("[CHAFA] Detected macOS Terminal.app - switching from 'full' to '256' colors for compatibility");
+                config.colors = "256".to_string();
+            }
+        }
+
         Self { config }
     }
 }
