@@ -165,6 +165,8 @@ pub struct FileBrowser {
     pub scroll_offset: usize,
     pub max_visible_files: usize,
     pub sort_mode: SortMode,
+    // Stack to track the last selected file in each directory for navigation
+    dir_stack: Vec<(String, usize)>, // (directory_path, selected_index)
 }
 
 impl FileBrowser {
@@ -182,6 +184,7 @@ impl FileBrowser {
             scroll_offset: 0,
             max_visible_files: 20,
             sort_mode: SortMode::Name,
+            dir_stack: Vec::new(),
         };
         browser.refresh_files()?;
         Ok(browser)
@@ -422,22 +425,55 @@ impl FileBrowser {
     }
 
     pub fn enter_directory(&mut self) -> Result<bool, Box<dyn Error>> {
-        if let Some(file) = self.get_selected_file()
-            && file.is_directory
-        {
-            self.current_dir = file.path.clone();
-            self.selected_index = 0;
-            self.scroll_offset = 0;
-            self.refresh_files()?;
-            return Ok(true);
+        // Check if current selection is a directory without borrowing conflicts
+        let is_dir = if let Some(file) = self.get_selected_file() {
+            file.is_directory
+        } else {
+            false
+        };
+
+        if is_dir {
+            // Save current directory and selection to stack before entering new dir
+            let current_dir = self.current_dir.clone();
+            let selected_index = self.selected_index;
+
+            self.dir_stack.push((current_dir, selected_index));
+
+            // Now get the actual file for path access (this is safe)
+            if let Some(file) = self.get_selected_file() {
+                self.current_dir = file.path.clone();
+                self.selected_index = 0;
+                self.scroll_offset = 0;
+                self.refresh_files()?;
+                return Ok(true);
+            }
         }
         Ok(false)
     }
 
     pub fn go_to_parent(&mut self) -> Result<bool, Box<dyn Error>> {
         if let Some(parent) = Path::new(&self.current_dir).parent() {
+            // Try to restore previous selection from stack when going back up
+            let restored_selection = if let Some((prev_dir, prev_index)) = self.dir_stack.pop() {
+                // Verify we're actually returning to the expected parent directory
+                if self.current_dir == prev_dir {
+                    Some(prev_index)
+                } else {
+                    None // Different path - don't restore selection
+                }
+            } else {
+                None // No previous selection in stack
+            };
+
             self.current_dir = parent.to_string_lossy().into_owned();
-            self.selected_index = 0;
+
+            // Restore the previously selected index if available and matches
+            if let Some(index) = restored_selection {
+                self.selected_index = index;
+            } else {
+                self.selected_index = 0;
+            }
+
             self.scroll_offset = 0;
             self.refresh_files()?;
             Ok(true)
