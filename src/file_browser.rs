@@ -451,12 +451,17 @@ impl FileBrowser {
         Ok(false)
     }
 
-    pub fn go_to_parent(&mut self) -> Result<bool, Box<dyn Error>> {
+    pub fn go_to_parent(&mut self) -> Result<bool, Box<dyn Error>>  {
         if let Some(parent) = Path::new(&self.current_dir).parent() {
+            eprintln!("Restoring selection for parent dir: {:?}\n", parent);
             // Try to restore previous selection from stack when going back up
+            eprintln!("self.dir_stack: {:?}\n", self.dir_stack);
             let restored_selection = if let Some((prev_dir, prev_index)) = self.dir_stack.pop() {
-                // Verify we're actually returning to the expected parent directory
-                if parent.to_string_lossy().into_owned() == prev_dir {
+                // Verify we're actually returning to the expected parent directory  
+                let expected_parent = parent.to_string_lossy().into_owned();
+                
+                // Simple string comparison - this should work for most cases
+                if expected_parent == prev_dir {
                     Some(prev_index)
                 } else {
                     None // Different path - don't restore selection
@@ -464,9 +469,11 @@ impl FileBrowser {
             } else {
                 None // No previous selection in stack
             };
-            
+
             self.current_dir = parent.to_string_lossy().into_owned();
-            
+            self.scroll_offset = 0;
+            self.refresh_files()?;
+
             // Restore the previously selected index if available and matches, but ensure it's valid
             let mut restored_index = 0;
             if let Some(index) = restored_selection {
@@ -474,16 +481,14 @@ impl FileBrowser {
                     restored_index = index;
                 }
             }
-            
+
             self.selected_index = restored_index;
-            self.scroll_offset = 0;
-            self.refresh_files()?;
-            
+
             // Make sure we have a valid selection after refresh
             if !self.files.is_empty() && self.selected_index >= self.files.len() {
                 self.selected_index = 0;
             }
-            
+
             // Center the restored selection on screen
             self.center_on_selection();
             Ok(true)
