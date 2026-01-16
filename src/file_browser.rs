@@ -451,7 +451,7 @@ impl FileBrowser {
         Ok(false)
     }
 
-    pub fn go_to_parent(&mut self) -> Result<bool, Box<dyn Error>> {
+pub fn go_to_parent(&mut self) -> Result<bool, Box<dyn Error>> {
         if let Some(parent) = Path::new(&self.current_dir).parent() {
             // Try to restore previous selection from stack when going back up
             let restored_selection = if let Some((prev_dir, prev_index)) = self.dir_stack.pop() {
@@ -464,18 +464,21 @@ impl FileBrowser {
             } else {
                 None // No previous selection in stack
             };
-
+            
             self.current_dir = parent.to_string_lossy().into_owned();
-
+            
             // Restore the previously selected index if available and matches
             if let Some(index) = restored_selection {
                 self.selected_index = index;
             } else {
                 self.selected_index = 0;
             }
-
+            
             self.scroll_offset = 0;
             self.refresh_files()?;
+            
+            // Center the restored selection on screen
+            self.center_on_selection();
             Ok(true)
         } else {
             Ok(false)
