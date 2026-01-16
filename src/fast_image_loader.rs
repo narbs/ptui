@@ -6,9 +6,9 @@ pub struct FastImageLoader;
 impl FastImageLoader {
     /// Load image with optimal strategy based on format and target size
     pub fn load_for_display(path: &str, target_max_dimension: u32) -> Result<DynamicImage, String> {
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         use std::time::Instant;
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         let load_start = Instant::now();
 
         // Detect format by extension
@@ -37,9 +37,10 @@ impl FastImageLoader {
             Self::load_with_image_crate(path)
         };
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         match &result {
             Ok(img) => {
+                #[cfg(all(not(test), feature = "debug-output"))]
                 let decoder_name = if is_jpeg {
                     #[cfg(feature = "fast-jpeg")]
                     {
@@ -52,6 +53,7 @@ impl FastImageLoader {
                 } else {
                     "image-crate"
                 };
+                #[cfg(all(not(test), feature = "debug-output"))]
                 eprintln!(
                     "[FAST-LOADER] Loaded {}x{} in {:?} (decoder: {})",
                     img.width(),
@@ -102,7 +104,7 @@ impl FastImageLoader {
             ScalingFactor::ONE // Full size
         };
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
             "[TURBOJPEG] Original: {}x{}, Target: {}, Scale: {:?}",
             original_width, original_height, target_max_dimension, scaling_factor
@@ -118,7 +120,7 @@ impl FastImageLoader {
         let output_width = scaled_header.width;
         let output_height = scaled_header.height;
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
             "[TURBOJPEG] Scaled dimensions: {}x{}",
             output_width, output_height
@@ -142,7 +144,7 @@ impl FastImageLoader {
             .decompress(&buffer, output_image.as_deref_mut())
             .map_err(|e| format!("JPEG decompression failed: {:?}", e))?;
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
             "[TURBOJPEG] Successfully decoded at: {}x{}",
             output_width, output_height

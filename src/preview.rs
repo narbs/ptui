@@ -67,7 +67,7 @@ impl PreviewManager {
         // Detect terminal graphics capabilities
         let (graphics_support, picker) = Self::detect_graphics_support();
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
             "[GRAPHICS] Terminal graphics support detected: {:?}",
             graphics_support
@@ -76,7 +76,7 @@ impl PreviewManager {
         // Cache font size for later use
         let font_size = picker.as_ref().map(|p| p.font_size).unwrap_or((14, 28)); // Default fallback
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
             "[GRAPHICS] Font size: {}x{} pixels",
             font_size.0, font_size.1
@@ -137,7 +137,9 @@ impl PreviewManager {
 
                     // Check what protocol was detected
                     // The picker stores the detected protocol internally
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!("[GRAPHICS] Picker created successfully");
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!(
                         "[GRAPHICS] Font size: {}x{}",
                         picker.font_size.0, picker.font_size.1
@@ -147,7 +149,9 @@ impl PreviewManager {
                     let term = std::env::var("TERM").unwrap_or_default();
                     let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
 
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!("[GRAPHICS] TERM={}", term);
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!("[GRAPHICS] TERM_PROGRAM={}", term_program);
 
                     // Determine support based on terminal type
@@ -156,18 +160,22 @@ impl PreviewManager {
                         || term_program.contains("ghostty")
                         || term_program.contains("WezTerm")
                     {
+                        #[cfg(all(not(test), feature = "debug-output"))]
                         eprintln!("[GRAPHICS] Detected Kitty protocol support");
                         TerminalGraphicsSupport::Kitty
                     } else if term_program.contains("iTerm") || term_program == "iTerm.app" {
+                        #[cfg(all(not(test), feature = "debug-output"))]
                         eprintln!("[GRAPHICS] Detected iTerm2 inline images support");
                         TerminalGraphicsSupport::Iterm2
                     } else if term.contains("xterm") && picker.font_size != (0, 0) {
                         // Sixel support - check if terminal might support it
+                        #[cfg(all(not(test), feature = "debug-output"))]
                         eprintln!(
                             "[GRAPHICS] Possible Sixel support, but falling back to text for now"
                         );
                         TerminalGraphicsSupport::None
                     } else {
+                        #[cfg(all(not(test), feature = "debug-output"))]
                         eprintln!("[GRAPHICS] No graphics protocol detected, using text mode");
                         TerminalGraphicsSupport::None
                     };
@@ -220,7 +228,7 @@ impl PreviewManager {
         // - 512: Maximum for <1s performance
         let capped = optimal.clamp(512, 1024);
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
             "[AUTO-RESIZE] Terminal: {}x{} chars, Display: ~{}x{}px, Optimal: {} (capped: {})",
             term_cols, term_rows, display_width, display_height, optimal, capped
@@ -354,28 +362,28 @@ impl PreviewManager {
             && self.graphics_support != TerminalGraphicsSupport::None
         {
             // Use graphical protocol based on terminal capabilities
-            #[cfg(not(test))]
+            #[cfg(all(not(test), feature = "debug-output"))]
             use std::time::Instant;
-            #[cfg(not(test))]
+            #[cfg(all(not(test), feature = "debug-output"))]
             let total_start = Instant::now();
 
-            #[cfg(not(test))]
+            #[cfg(all(not(test), feature = "debug-output"))]
             let load_start = Instant::now();
             // Use fast loader with subsampling based on target dimension
             match FastImageLoader::load_for_display(path, self.graphical_max_dimension) {
                 Ok(img) => {
-                    #[cfg(not(test))]
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     let load_time = load_start.elapsed();
                     let original_w = img.width();
                     let original_h = img.height();
-                    #[cfg(not(test))]
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!(
                         "[TIMING] Total image load ({}x{}): {:?}",
                         original_w, original_h, load_time
                     );
 
                     // Create protocol based on terminal support
-                    #[cfg(not(test))]
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     let protocol_start = Instant::now();
                     // Generate unique ID based on file path hash
                     use std::collections::hash_map::DefaultHasher;
@@ -390,7 +398,7 @@ impl PreviewManager {
 
                     let protocol: Box<dyn StatefulProtocol> = match self.graphics_support {
                         TerminalGraphicsSupport::Kitty => {
-                            #[cfg(not(test))]
+                            #[cfg(all(not(test), feature = "debug-output"))]
                             eprintln!("[PROTOCOL] Using Kitty protocol");
                             // Calculate actual character aspect ratio from font metrics
                             let font_width = self.font_size.0 as f32;
@@ -408,7 +416,7 @@ impl PreviewManager {
                             ))
                         }
                         TerminalGraphicsSupport::Iterm2 => {
-                            #[cfg(not(test))]
+                            #[cfg(all(not(test), feature = "debug-output"))]
                             eprintln!("[PROTOCOL] Using iTerm2 protocol via ratatui-image");
                             // Pre-resize image to fill the available pixel space
                             if let Some(ref mut picker) = self.picker {
@@ -419,7 +427,7 @@ impl PreviewManager {
                                 let target_width_px = converter_width as u32 * font_width;
                                 let target_height_px = converter_height as u32 * font_height;
 
-                                #[cfg(not(test))]
+                                #[cfg(all(not(test), feature = "debug-output"))]
                                 {
                                     eprintln!(
                                         "[ITERM2] Preview area: {}x{} cells = {}x{}px",
@@ -451,7 +459,7 @@ impl PreviewManager {
                                     (w.min(target_width_px), h)
                                 };
 
-                                #[cfg(not(test))]
+                                #[cfg(all(not(test), feature = "debug-output"))]
                                 eprintln!(
                                     "[ITERM2] Resizing image to: {}x{}px",
                                     resize_width, resize_height
@@ -467,7 +475,7 @@ impl PreviewManager {
                                 // Update final dimensions to match resized image
                                 final_img_w = resize_width;
                                 final_img_h = resize_height;
-                                #[cfg(not(test))]
+                                #[cfg(all(not(test), feature = "debug-output"))]
                                 eprintln!(
                                     "[ITERM2] Final dimensions: {}x{}px",
                                     final_img_w, final_img_h
@@ -475,7 +483,7 @@ impl PreviewManager {
 
                                 picker.new_resize_protocol(resized_img)
                             } else {
-                                #[cfg(not(test))]
+                                #[cfg(all(not(test), feature = "debug-output"))]
                                 eprintln!("[PROTOCOL] No picker available, falling back to text");
                                 return PreviewContent::Text(self.render_with_converter(
                                     path,
@@ -485,7 +493,7 @@ impl PreviewManager {
                             }
                         }
                         TerminalGraphicsSupport::Sixel => {
-                            #[cfg(not(test))]
+                            #[cfg(all(not(test), feature = "debug-output"))]
                             eprintln!(
                                 "[PROTOCOL] Using Sixel protocol (not yet implemented, falling back to text)"
                             );
@@ -508,9 +516,9 @@ impl PreviewManager {
                         }
                     };
 
-                    #[cfg(not(test))]
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     let protocol_time = protocol_start.elapsed();
-                    #[cfg(not(test))]
+                    #[cfg(all(not(test), feature = "debug-output"))]
                     {
                         eprintln!("[TIMING] Protocol creation: {:?}", protocol_time);
                         eprintln!(
@@ -538,7 +546,7 @@ impl PreviewManager {
             }
         } else {
             // Use text-based converter (chafa, jp2a, etc.)
-            #[cfg(not(test))]
+            #[cfg(all(not(test), feature = "debug-output"))]
             if self.graphics_support == TerminalGraphicsSupport::None {
                 eprintln!("[RENDER] Using text-based converter (graphics not supported)");
             }
@@ -554,7 +562,7 @@ impl PreviewManager {
             if let Some(oldest_key) = self.cache_order.first().cloned() {
                 self.cache.remove(&oldest_key);
                 self.cache_order.remove(0);
-                #[cfg(not(test))]
+                #[cfg(all(not(test), feature = "debug-output"))]
                 eprintln!("[CACHE] Evicted oldest entry: {}", oldest_key);
             }
         }
