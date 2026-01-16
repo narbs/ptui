@@ -172,7 +172,7 @@ impl GraphicalConverter {
         true
     }
 
-    #[cfg_attr(test, allow(dead_code))]
+    #[cfg_attr(all(test, feature = "debug-output"), allow(dead_code))]
     pub fn get_protocol_type(&self) -> &ProtocolType {
         &self.protocol_type
     }
@@ -204,7 +204,7 @@ pub fn create_converter(config: &PTuiConfig) -> Box<dyn AsciiConverter> {
         "graphical" => {
             match GraphicalConverter::new(config.converter.chafa.clone()) {
                 Ok(converter) => {
-                    #[cfg(not(test))]
+                    #[cfg_attr(all(test, feature = "debug-output"), allow(dead_code))]
                     eprintln!(
                         "Using graphical mode with protocol: {:?}",
                         converter.get_protocol_type()
@@ -212,7 +212,6 @@ pub fn create_converter(config: &PTuiConfig) -> Box<dyn AsciiConverter> {
                     Box::new(converter)
                 }
                 Err(e) => {
-                    #[cfg(not(test))]
                     eprintln!(
                         "Failed to initialize graphical mode: {}. Falling back to chafa.",
                         e

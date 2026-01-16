@@ -152,9 +152,9 @@ impl StatefulProtocol for ViuerKittyProtocol {
             return;
         }
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         use std::time::Instant;
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         let total_start = Instant::now();
 
         let (width, height) = self.calculate_dimensions(area);
@@ -172,7 +172,7 @@ impl StatefulProtocol for ViuerKittyProtocol {
             let new_width = (self.image.width() as f32 * scale) as u32;
             let new_height = (self.image.height() as f32 * scale) as u32;
 
-            #[cfg(not(test))]
+            #[cfg(all(not(test), feature = "debug-output"))]
             let resize_start = Instant::now();
             // Use fastest filter - Nearest is 10x faster than Triangle/Lanczos
             let resized = self.image.resize_exact(
@@ -180,7 +180,7 @@ impl StatefulProtocol for ViuerKittyProtocol {
                 new_height,
                 image::imageops::FilterType::Nearest,
             );
-            #[cfg(not(test))]
+            #[cfg(all(not(test), feature = "debug-output"))]
             eprintln!(
                 "[TIMING] Resize {}x{} -> {}x{}: {:?}",
                 self.image.width(),
@@ -194,10 +194,10 @@ impl StatefulProtocol for ViuerKittyProtocol {
             self.image.clone()
         };
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         let encode_start = Instant::now();
         self.escape_sequence = self.encode_image(&img_to_encode, width, height);
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
             "[TIMING] Base64 encode ({}x{} = {}MB): {:?}",
             img_to_encode.width(),
@@ -209,7 +209,7 @@ impl StatefulProtocol for ViuerKittyProtocol {
         self.rect = Rect::new(0, 0, width, height);
         self.needs_retransmit = false;
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!("[TIMING] resize_encode TOTAL: {:?}", total_start.elapsed());
     }
 
