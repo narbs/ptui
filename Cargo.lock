@@ -1645,7 +1645,7 @@ dependencies = [
 
 [[package]]
 name = "ptui"
-version = "1.0.12"
+version = "2.0.0"
 dependencies = [
  "ansi-to-tui",
  "base64",
