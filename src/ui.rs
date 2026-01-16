@@ -765,7 +765,7 @@ mod tests {
 
         terminal
             .draw(|f| {
-                UIRenderer::render_preview(f, area, Some(&preview), &localization, None);
+                UIRenderer::render_preview(f, area, Some(&preview), &localization, None, false);
             })
             .unwrap();
     }
@@ -780,7 +780,7 @@ mod tests {
 
         terminal
             .draw(|f| {
-                UIRenderer::render_preview(f, area, None, &localization, None);
+                UIRenderer::render_preview(f, area, None, &localization, None, false);
             })
             .unwrap();
     }
