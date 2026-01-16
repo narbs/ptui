@@ -37,6 +37,7 @@ pub struct ChafaTui {
     localization: Localization,
     preview_content: Option<PreviewContent>,
     is_preview_image: bool,
+    is_text_file: bool,
     terminal_width: u16,
     terminal_height: u16,
     show_help_on_startup: bool,
@@ -86,6 +87,7 @@ impl ChafaTui {
             localization,
             preview_content: None,
             is_preview_image: false,
+            is_text_file: false,
             terminal_width: 80,
             terminal_height: 24,
             show_help_on_startup: true,
@@ -404,7 +406,9 @@ impl ChafaTui {
         if self.show_help_on_startup || self.show_help_toggle {
             self.preview_content = None;
             self.is_preview_image = false;
+            self.is_text_file = false;
         } else if let Some(file) = self.file_browser.get_selected_file() {
+            self.is_text_file = file.is_text_file();
             self.preview_content = Some(self.preview_manager.generate_preview(
                 file,
                 self.ui_layout.preview_width,
@@ -416,6 +420,7 @@ impl ChafaTui {
             // ASCII files should be left-aligned like text files
             self.is_preview_image = file.is_image();
         } else {
+            self.is_text_file = false;
             self.preview_content = None;
             self.is_preview_image = false;
         }
@@ -929,6 +934,7 @@ impl ChafaTui {
                 self.preview_content.as_ref(),
                 &self.localization,
                 self.ascii_logo.as_ref(),
+                self.is_text_file
             );
 
             UIRenderer::render_debug_pane(

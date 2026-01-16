@@ -175,6 +175,7 @@ impl UIRenderer {
         preview_content: Option<&PreviewContent>,
         localization: &Localization,
         ascii_logo: Option<&Text<'static>>,
+        is_text_file: bool,
     ) {
         // Clear the preview area first to prevent artifacts when switching between text files
         use ratatui::widgets::Clear;
@@ -186,11 +187,18 @@ impl UIRenderer {
                     .title(format!("🖼️ {}", localization.get("image_preview")))
                     .borders(Borders::ALL);
 
-                // For text previews (chafa/jp2a), center the content horizontally
+                // For text previews, left-align them to avoid centering regular text files
+                // This prevents regular text files from being centered while preserving
+                // the previous behavior for ASCII art (which may still be centered via other means)
+                let alignment = if is_text_file {
+                    Alignment::Left
+                } else {
+                    Alignment::Center
+                };
                 let preview_paragraph = Paragraph::new(text.clone())
                     .block(preview_block)
                     .wrap(Wrap { trim: false })
-                    .alignment(Alignment::Center);
+                    .alignment(alignment);
 
                 f.render_widget(preview_paragraph, area);
             }

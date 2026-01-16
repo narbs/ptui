@@ -451,13 +451,13 @@ impl FileBrowser {
         Ok(false)
     }
 
-    pub fn go_to_parent(&mut self) -> Result<bool, Box<dyn Error>>  {
+    pub fn go_to_parent(&mut self) -> Result<bool, Box<dyn Error>> {
         if let Some(parent) = Path::new(&self.current_dir).parent() {
             // Try to restore previous selection from stack when going back up
             let restored_selection = if let Some((prev_dir, prev_index)) = self.dir_stack.pop() {
-                // Verify we're actually returning to the expected parent directory  
+                // Verify we're actually returning to the expected parent directory
                 let expected_parent = parent.to_string_lossy().into_owned();
-                
+
                 // Simple string comparison - this should work for most cases
                 if expected_parent == prev_dir {
                     Some(prev_index)
