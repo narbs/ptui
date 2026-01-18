@@ -6,6 +6,9 @@ interface with real-time image preview capabilities.
 
 ![PTUI - Picture TUI](docs/ptui_image.png)
 
+
+![PTUI - Picture TUI 2](docs/ptui_image2.png)
+
 Features
 --------
 - Support for common image formats
