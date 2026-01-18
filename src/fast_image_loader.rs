@@ -186,7 +186,7 @@ impl FastImageLoader {
         let width = info.width as u32;
         let height = info.height as u32;
 
-        #[cfg(not(test))]
+        #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!("[ZUNE-JPEG] Decoded: {}x{}", width, height);
 
         // Convert to DynamicImage
