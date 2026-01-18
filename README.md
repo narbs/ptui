@@ -10,7 +10,9 @@ Features
 --------
 - Support for common image formats
 - Real-time image preview using ANSI terminal graphics
+- Support for kitty and iTerm2 graphical converters (works on Ghostty and iTerm2)
 - Multiple picture-to-text converters: chafa and jp2a supported so far
+- Dynamically switch between converters by pressing TAB
 - Slide show mode with arrow-key support and transitions (transitions only with jp2a)
 - Navigate with arrow keys or vim-style j/k
 - Enter directories with Enter, go back with Backspace
@@ -29,6 +31,8 @@ Requirements
 ------------
 - chafa - For converting images to ANSI/terminal output
 - ImageMagick (identify command) - For image dimension detection
+- jp2a - for displaying images in jp2a text output
+- nasm (for building fast-jpeg)
 
 Installation
 ------------
@@ -37,14 +41,14 @@ From Source on Arch Linux:
 
     git clone https://github.com/narbs/ptui.git; cd ptui
     yay -S cargo
-    cargo build --release
+    cargo build --features fast-jpeg --release
     cargo install --path .
 
 From Source on Mac:
 
     git clone https://github.com/narbs/ptui.git; cd ptui
     brew install rust
-    cargo build --release
+    cargo build --features fast-jpeg --release
     cargo install --path .
 
 From AUR (Arch Linux):
@@ -73,6 +77,7 @@ Controls:
     Home/End          - Home: Go to start, End: Go to end
     o                 - Open in system file browser (if available)
     q / Ctrl+C        - Quit
+    TAB               - Cycle between converters
     ?                 - Help
 ```
 
@@ -128,12 +133,17 @@ Example jp2a configuration with slide show transitions:
       "dither": "none",
       "chars": null
     },
-    "selected": "jp2a"
+    "graphical": {
+      "filter_type": "lanczos3",
+      "max_dimension": 512,
+      "auto_resize": true
+    },
+    "selected": "graphical"
   },
   "locale": "en",
   "slideshow_delay_ms": 2000,
   "slideshow_transitions": {
-    "enabled": true,
+    "enabled": false,
     "effect": "scattering",
     "frame_duration_ms": 50
   }
