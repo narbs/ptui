@@ -215,10 +215,10 @@ impl PreviewManager {
         // Terminal graphics don't need high DPI - Kitty/iTerm scale well
         let optimal = (display_width.max(display_height) as f32 * 0.9) as u32;
 
-        // Aggressive clamping for <1s load times:
-        // - 256: Minimum acceptable quality
-        // - 512: Maximum for <1s performance
-        let capped = optimal.clamp(512, 1024);
+        // Aggressive clamping for <500ms load times:
+        // - 512: Minimum acceptable quality
+        // - 768: Maximum for fast performance (Kitty will scale up)
+        let capped = optimal.clamp(512, 768);
 
         #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
@@ -389,40 +389,36 @@ impl PreviewManager {
                             #[cfg(all(not(test), feature = "debug-output"))]
                             eprintln!("[PROTOCOL] Using Kitty protocol via ratatui-image");
                             if let Some(ref picker) = self.picker {
-                                // Pre-downscale image to reduce encoding time
-                                // Calculate target size based on terminal area and font size
-                                let font_size = picker.font_size();
-                                let font_width = font_size.0 as u32;
-                                let font_height = font_size.1 as u32;
-
-                                // Target pixel dimensions based on preview area
-                                let target_width_px = converter_width as u32 * font_width;
-                                let target_height_px = converter_height as u32 * font_height;
+                                // Pre-downscale image aggressively to reduce encoding time
+                                // Use graphical_max_dimension as the cap for faster encoding
+                                let max_dim = self.graphical_max_dimension;
 
                                 // Calculate resize dimensions maintaining aspect ratio
                                 let img_aspect = original_w as f32 / original_h as f32;
-                                let target_aspect = target_width_px as f32 / target_height_px as f32;
 
-                                let (resize_width, resize_height) = if img_aspect > target_aspect {
-                                    // Image is wider - fit to width
-                                    let w = target_width_px.min(original_w);
-                                    let h = (w as f32 / img_aspect) as u32;
-                                    (w, h)
+                                let (resize_width, resize_height) = if original_w > max_dim || original_h > max_dim {
+                                    if img_aspect > 1.0 {
+                                        // Wider than tall - limit width
+                                        let w = max_dim.min(original_w);
+                                        let h = (w as f32 / img_aspect) as u32;
+                                        (w, h)
+                                    } else {
+                                        // Taller than wide - limit height
+                                        let h = max_dim.min(original_h);
+                                        let w = (h as f32 * img_aspect) as u32;
+                                        (w, h)
+                                    }
                                 } else {
-                                    // Image is taller - fit to height
-                                    let h = target_height_px.min(original_h);
-                                    let w = (h as f32 * img_aspect) as u32;
-                                    (w, h)
+                                    (original_w, original_h)
                                 };
 
                                 #[cfg(all(not(test), feature = "debug-output"))]
                                 eprintln!(
-                                    "[KITTY] Pre-downscaling {}x{} -> {}x{} (target area {}x{}px)",
-                                    original_w, original_h, resize_width, resize_height,
-                                    target_width_px, target_height_px
+                                    "[KITTY] Pre-downscaling {}x{} -> {}x{} (max_dim {})",
+                                    original_w, original_h, resize_width, resize_height, max_dim
                                 );
 
-                                // Only resize if image is larger than target
+                                // Only resize if needed
                                 let final_img = if resize_width < original_w || resize_height < original_h {
                                     img.resize(
                                         resize_width,
