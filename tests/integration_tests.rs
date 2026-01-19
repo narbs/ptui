@@ -26,8 +26,8 @@ fn test_file_browser_and_preview_integration() {
             preview::PreviewContent::Text(text) => {
                 assert!(!text.lines.is_empty());
             }
-            preview::PreviewContent::Graphical(_) => {
-                // Graphical preview is also valid
+            preview::PreviewContent::Graphical(_) | preview::PreviewContent::Kitty(_) => {
+                // Graphical/Kitty preview is also valid
             }
         }
     }
@@ -161,14 +161,14 @@ fn test_preview_caching_behavior() {
 
     match preview1 {
         preview::PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-        preview::PreviewContent::Graphical(_) => {
-            // Graphical preview is also valid
+        preview::PreviewContent::Graphical(_) | preview::PreviewContent::Kitty(_) => {
+            // Graphical/Kitty preview is also valid
         }
     }
     match preview2 {
         preview::PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-        preview::PreviewContent::Graphical(_) => {
-            // Graphical preview is also valid
+        preview::PreviewContent::Graphical(_) | preview::PreviewContent::Kitty(_) => {
+            // Graphical/Kitty preview is also valid
         }
     }
 
@@ -176,8 +176,8 @@ fn test_preview_caching_behavior() {
     let preview3 = preview_manager.generate_preview(&file_item, 80, 24, 0, &localization);
     match preview3 {
         preview::PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-        preview::PreviewContent::Graphical(_) => {
-            // Graphical preview is also valid
+        preview::PreviewContent::Graphical(_) | preview::PreviewContent::Kitty(_) => {
+            // Graphical/Kitty preview is also valid
         }
     }
 }

@@ -321,6 +321,14 @@ impl UIRenderer {
                     &mut graphical_borrow.protocol,
                 );
             }
+            Some(PreviewContent::Kitty(_)) => {
+                // Fast Kitty rendering - just draw the border block here
+                // The actual image is rendered in render_kitty_post_draw() AFTER ratatui flushes
+                let preview_block = Block::default()
+                    .title(format!("🖼️ {}", localization.get("image_preview")))
+                    .borders(Borders::ALL);
+                f.render_widget(preview_block, area);
+            }
             None => {
                 // Show help text with logo if available
                 let help_text = localization.get_help_text();
@@ -492,6 +500,10 @@ impl UIRenderer {
                     centered_area,
                     &mut graphical_borrow.protocol,
                 );
+            }
+            Some(PreviewContent::Kitty(_)) => {
+                // Fast Kitty rendering - image is rendered in render_kitty_post_draw()
+                // after ratatui's frame is flushed, so nothing to do here
             }
             None => {
                 let content = Text::from(localization.get("no_file_selected"));

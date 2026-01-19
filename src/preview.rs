@@ -4,6 +4,8 @@ use crate::fast_image_loader::FastImageLoader;
 use crate::file_browser::FileItem;
 use crate::localization::Localization;
 use ansi_to_tui::IntoText;
+use base64::{engine::general_purpose, Engine};
+use image::DynamicImage;
 use ratatui::text::Text;
 use ratatui_image::picker::Picker;
 #[cfg(not(test))]
@@ -12,7 +14,7 @@ use ratatui_image::protocol::StatefulProtocol;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::Command;
 use std::rc::Rc;
@@ -31,6 +33,26 @@ pub enum TerminalGraphicsSupport {
 pub enum PreviewContent {
     Text(Text<'static>),
     Graphical(Rc<RefCell<GraphicalPreview>>),
+    /// Fast Kitty rendering using viuer-style pre-encoding
+    Kitty(Rc<RefCell<KittyPreview>>),
+}
+
+/// Pre-encoded Kitty image for fast rendering
+pub struct KittyPreview {
+    /// Original image dimensions (for aspect ratio calculation)
+    pub img_width: u32,
+    pub img_height: u32,
+    /// Path to temp file containing RGBA data (for local Kitty)
+    pub temp_file_path: Option<String>,
+    /// Pre-encoded escape sequence (for remote Kitty)
+    pub escape_sequence: Option<String>,
+    /// Display dimensions in terminal cells
+    pub display_width: u32,
+    pub display_height: u32,
+    /// Whether this has been rendered (to avoid re-sending)
+    pub rendered: bool,
+    /// Font size for positioning calculations
+    pub font_size: (u16, u16),
 }
 
 pub struct GraphicalPreview {
@@ -151,8 +173,7 @@ impl PreviewManager {
                     // Map ratatui-image's ProtocolType to our TerminalGraphicsSupport
                     let support = match picker.protocol_type() {
                         ProtocolType::Kitty => {
-                            #[cfg(all(not(test), feature = "debug-output"))]
-                            eprintln!("[GRAPHICS] Using Kitty protocol");
+                            eprintln!("[GRAPHICS] Detected Kitty protocol");
                             TerminalGraphicsSupport::Kitty
                         }
                         ProtocolType::Iterm2 => {
@@ -227,6 +248,160 @@ impl PreviewManager {
         );
 
         capped
+    }
+
+    /// Encode image to Kitty format using temp file (fast local method)
+    /// Returns the temp file path and display dimensions
+    fn encode_kitty_local(
+        img: &DynamicImage,
+        _display_width: u32,
+        _display_height: u32,
+    ) -> Result<String, String> {
+        let rgba = img.to_rgba8();
+        let raw_img = rgba.as_raw();
+
+        // Create temp file
+        let mut tmpfile = tempfile::Builder::new()
+            .prefix(".ptui-kitty.")
+            .rand_bytes(4)
+            .tempfile()
+            .map_err(|e| format!("Failed to create temp file: {}", e))?;
+
+        tmpfile
+            .write_all(raw_img)
+            .map_err(|e| format!("Failed to write to temp file: {}", e))?;
+        tmpfile
+            .flush()
+            .map_err(|e| format!("Failed to flush temp file: {}", e))?;
+
+        // Keep the file (don't delete on drop) - Kitty will delete it
+        let path = tmpfile
+            .path()
+            .to_str()
+            .ok_or("Invalid temp file path")?
+            .to_string();
+
+        // Persist the temp file so it's not deleted when tmpfile goes out of scope
+        let _ = tmpfile.keep();
+
+        #[cfg(all(not(test), feature = "debug-output"))]
+        eprintln!(
+            "[KITTY-LOCAL] Encoded {}x{} image to temp file, display {}x{} cells",
+            img.width(),
+            img.height(),
+            display_width,
+            display_height
+        );
+
+        Ok(path)
+    }
+
+    /// Encode image to Kitty escape sequence (for remote/fallback)
+    fn encode_kitty_remote(
+        img: &DynamicImage,
+        display_width: u32,
+        display_height: u32,
+    ) -> String {
+        let rgba = img.to_rgba8();
+        let raw = rgba.as_raw();
+        let encoded = general_purpose::STANDARD.encode(raw);
+        let mut iter = encoded.chars().peekable();
+
+        let mut result = String::new();
+
+        // Delete any existing images first
+        result.push_str("\x1b_Ga=d,d=a\x1b\\");
+
+        // First chunk with image metadata
+        // a=T (transmit+display), t=d (direct data), f=32 (RGBA), q=2 (quiet mode)
+        let first_chunk: String = iter.by_ref().take(4096).collect();
+        result.push_str(&format!(
+            "\x1b_Ga=T,t=d,f=32,q=2,s={},v={},c={},r={},m=1;{}\x1b\\",
+            img.width(),
+            img.height(),
+            display_width,
+            display_height,
+            first_chunk
+        ));
+
+        // Remaining chunks
+        while iter.peek().is_some() {
+            let chunk: String = iter.by_ref().take(4096).collect();
+            let m = if iter.peek().is_some() { 1 } else { 0 };
+            result.push_str(&format!("\x1b_Gm={},q=2;{}\x1b\\", m, chunk));
+        }
+
+        #[cfg(all(not(test), feature = "debug-output"))]
+        eprintln!(
+            "[KITTY-REMOTE] Encoded {}x{} image, {} bytes, display {}x{} cells",
+            img.width(),
+            img.height(),
+            result.len(),
+            display_width,
+            display_height
+        );
+
+        result
+    }
+
+    /// Print Kitty image at position using temp file method
+    pub fn print_kitty_image(
+        preview: &mut KittyPreview,
+        x: u16,
+        y: u16,
+    ) -> std::io::Result<()> {
+        use std::io::stdout;
+
+        eprintln!(
+            "[KITTY-RENDER] Called with pos ({}, {}), img {}x{}, display {}x{}",
+            x, y, preview.img_width, preview.img_height, preview.display_width, preview.display_height
+        );
+
+        let mut stdout = stdout();
+
+        // First, delete any existing image at this location (Kitty graphics can stack)
+        // Using 'a=d' with 'd=a' deletes all images
+        write!(stdout, "\x1b_Ga=d,d=a\x1b\\")?;
+
+        // Move cursor to position
+        write!(stdout, "\x1b[{};{}H", y + 1, x + 1)?;
+
+        if let Some(ref path) = preview.temp_file_path {
+            // Check if file exists and get its size
+            let file_exists = std::path::Path::new(path).exists();
+            let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
+            eprintln!(
+                "[KITTY-RENDER] Temp file: {}, exists: {}, size: {} bytes",
+                path, file_exists, file_size
+            );
+
+            // Local method - send file path to Kitty
+            // Use viuer's parameter order: f, s, v, c, r, a, t, q
+            let encoded_path = general_purpose::STANDARD.encode(path);
+            eprintln!("[KITTY-RENDER] Encoded path length: {}", encoded_path.len());
+
+            write!(
+                stdout,
+                "\x1b_Gf=32,s={},v={},c={},r={},a=T,t=t,q=2;{}\x1b\\",
+                preview.img_width,
+                preview.img_height,
+                preview.display_width,
+                preview.display_height,
+                encoded_path
+            )?;
+        } else if let Some(ref seq) = preview.escape_sequence {
+            eprintln!("[KITTY-RENDER] Using escape sequence, length: {}", seq.len());
+            // Remote method - write pre-encoded sequence
+            write!(stdout, "{}", seq)?;
+        } else {
+            eprintln!("[KITTY-RENDER] No temp file or escape sequence!");
+        }
+
+        stdout.flush()?;
+        preview.rendered = true;
+        eprintln!("[KITTY-RENDER] Flush complete");
+
+        Ok(())
     }
 
     pub fn get_debug_info(&self) -> &str {
@@ -386,63 +561,109 @@ impl PreviewManager {
 
                     let protocol: StatefulProtocol = match self.graphics_support {
                         TerminalGraphicsSupport::Kitty => {
+                            // Use fast viuer-style Kitty encoding (bypasses ratatui-image)
                             #[cfg(all(not(test), feature = "debug-output"))]
-                            eprintln!("[PROTOCOL] Using Kitty protocol via ratatui-image");
-                            if let Some(ref picker) = self.picker {
-                                // Pre-downscale image aggressively to reduce encoding time
-                                // Use graphical_max_dimension as the cap for faster encoding
-                                let max_dim = self.graphical_max_dimension;
+                            eprintln!("[PROTOCOL] Using fast Kitty encoding (viuer-style)");
 
-                                // Calculate resize dimensions maintaining aspect ratio
-                                let img_aspect = original_w as f32 / original_h as f32;
+                            // Pre-downscale image aggressively for fast encoding
+                            let max_dim = self.graphical_max_dimension;
+                            let img_aspect = original_w as f32 / original_h as f32;
 
-                                let (resize_width, resize_height) = if original_w > max_dim || original_h > max_dim {
-                                    if img_aspect > 1.0 {
-                                        // Wider than tall - limit width
-                                        let w = max_dim.min(original_w);
-                                        let h = (w as f32 / img_aspect) as u32;
-                                        (w, h)
-                                    } else {
-                                        // Taller than wide - limit height
-                                        let h = max_dim.min(original_h);
-                                        let w = (h as f32 * img_aspect) as u32;
-                                        (w, h)
-                                    }
+                            let (resize_width, resize_height) = if original_w > max_dim || original_h > max_dim {
+                                if img_aspect > 1.0 {
+                                    let w = max_dim.min(original_w);
+                                    let h = (w as f32 / img_aspect) as u32;
+                                    (w, h)
                                 } else {
-                                    (original_w, original_h)
-                                };
-
-                                #[cfg(all(not(test), feature = "debug-output"))]
-                                eprintln!(
-                                    "[KITTY] Pre-downscaling {}x{} -> {}x{} (max_dim {})",
-                                    original_w, original_h, resize_width, resize_height, max_dim
-                                );
-
-                                // Only resize if needed
-                                let final_img = if resize_width < original_w || resize_height < original_h {
-                                    img.resize(
-                                        resize_width,
-                                        resize_height,
-                                        image::imageops::FilterType::Triangle, // Fast filter
-                                    )
-                                } else {
-                                    img
-                                };
-
-                                // Update final dimensions
-                                final_img_w = final_img.width();
-                                final_img_h = final_img.height();
-
-                                picker.new_resize_protocol(final_img)
+                                    let h = max_dim.min(original_h);
+                                    let w = (h as f32 * img_aspect) as u32;
+                                    (w, h)
+                                }
                             } else {
-                                #[cfg(all(not(test), feature = "debug-output"))]
-                                eprintln!("[PROTOCOL] No picker available, falling back to text");
-                                return PreviewContent::Text(self.render_with_converter(
-                                    path,
-                                    converter_width,
-                                    converter_height,
-                                ));
+                                (original_w, original_h)
+                            };
+
+                            #[cfg(all(not(test), feature = "debug-output"))]
+                            eprintln!(
+                                "[KITTY-FAST] Pre-downscaling {}x{} -> {}x{} (max_dim {})",
+                                original_w, original_h, resize_width, resize_height, max_dim
+                            );
+
+                            // Resize if needed
+                            let final_img = if resize_width < original_w || resize_height < original_h {
+                                img.resize(
+                                    resize_width,
+                                    resize_height,
+                                    image::imageops::FilterType::Triangle,
+                                )
+                            } else {
+                                img
+                            };
+
+                            let img_w = final_img.width();
+                            let img_h = final_img.height();
+
+                            // Calculate display dimensions in cells, preserving aspect ratio
+                            // Account for character cell aspect ratio (chars are taller than wide)
+                            let img_aspect = img_w as f32 / img_h as f32;
+                            let font_width = self.font_size.0 as f32;
+                            let font_height = self.font_size.1 as f32;
+                            let char_aspect = font_height / font_width;
+
+                            // Calculate how many columns needed if we use full height
+                            let cols_for_full_height =
+                                (converter_height as f32 * img_aspect * char_aspect) as u32;
+
+                            let (display_width, display_height) =
+                                if cols_for_full_height <= converter_width as u32 {
+                                    // Image fits width-wise, use full height
+                                    (cols_for_full_height, converter_height as u32)
+                                } else {
+                                    // Image too wide, fit to width and calculate height
+                                    let rows_for_full_width =
+                                        (converter_width as f32 / img_aspect / char_aspect) as u32;
+                                    (converter_width as u32, rows_for_full_width)
+                                };
+
+                            // Use direct data method (more reliable across terminals)
+                            eprintln!(
+                                "[KITTY-FAST] Creating Kitty preview for {}x{} image, display {}x{} cells",
+                                img_w, img_h, display_width, display_height
+                            );
+                            let escape_seq =
+                                Self::encode_kitty_remote(&final_img, display_width, display_height);
+                            eprintln!("[KITTY-FAST] Encoded escape sequence, {} bytes", escape_seq.len());
+                            let kitty_preview = KittyPreview {
+                                img_width: img_w,
+                                img_height: img_h,
+                                temp_file_path: None,
+                                escape_sequence: Some(escape_seq),
+                                display_width,
+                                display_height,
+                                rendered: false,
+                                font_size: self.font_size,
+                            };
+
+                            #[cfg(all(not(test), feature = "debug-output"))]
+                            {
+                                let protocol_time = protocol_start.elapsed();
+                                eprintln!("[TIMING] Kitty encoding: {:?}", protocol_time);
+                                eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());
                             }
+
+                            // Return early with Kitty preview
+                            let result = PreviewContent::Kitty(Rc::new(RefCell::new(kitty_preview)));
+
+                            // Cache and return
+                            if self.cache.len() >= self.max_cache_size {
+                                if let Some(oldest_key) = self.cache_order.first().cloned() {
+                                    self.cache.remove(&oldest_key);
+                                    self.cache_order.remove(0);
+                                }
+                            }
+                            self.cache.insert(cache_key.clone(), result.clone());
+                            self.cache_order.push(cache_key);
+                            return result;
                         }
                         TerminalGraphicsSupport::Iterm2 => {
                             #[cfg(all(not(test), feature = "debug-output"))]
@@ -860,7 +1081,7 @@ mod tests {
         assert_eq!(manager.debug_info, localization.get("directory_selected"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) => panic!("Expected text preview for directory"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview for directory"),
         }
     }
 
@@ -887,7 +1108,7 @@ mod tests {
         assert!(manager.debug_info.contains("test.txt"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) => panic!("Expected text preview for text file"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview for text file"),
         }
     }
 
@@ -913,7 +1134,7 @@ mod tests {
         assert!(manager.debug_info.contains("test.ascii"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) => panic!("Expected text preview for ascii file"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview for ascii file"),
         }
     }
 
@@ -932,7 +1153,7 @@ mod tests {
         );
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) => panic!("Expected text preview for unsupported file"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview for unsupported file"),
         }
     }
 
@@ -1038,7 +1259,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            PreviewContent::Graphical(_) => panic!("Expected text preview"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview"),
         };
 
         // Test scrolling with offset
@@ -1055,7 +1276,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            PreviewContent::Graphical(_) => panic!("Expected text preview"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview"),
         };
 
         // The first preview should start with "Line 0"
@@ -1103,7 +1324,7 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            PreviewContent::Graphical(_) => panic!("Expected text preview"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview"),
         };
 
         // Should show the limit message since we have more than 10000 lines
@@ -1211,8 +1432,8 @@ mod tests {
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) => {
-                // Graphical preview is also valid for images
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                // Graphical/Kitty preview is also valid for images
             }
         }
     }
@@ -1236,7 +1457,9 @@ mod tests {
         let preview = manager.generate_preview(&file_item, 80, 24, 0, &localization);
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) => panic!("Expected text preview for empty file"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                panic!("Expected text preview for empty file")
+            }
         }
     }
 }

@@ -82,6 +82,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             // Clear Kitty graphics if switching from graphical to text mode
             app.clear_graphics_if_needed();
             terminal.draw(|f| app.draw(f))?;
+            // Render Kitty graphics AFTER ratatui's frame is flushed
+            app.render_kitty_post_draw();
         }
 
         // Handle events with timeout for slideshow

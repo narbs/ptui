@@ -1009,9 +1009,11 @@ impl ChafaTui {
         // Only do this in non-test environments to avoid interfering with test output
         #[cfg(not(test))]
         {
-            // Check if current preview is text-based (not graphical)
-            let is_current_graphical =
-                matches!(&self.preview_content, Some(PreviewContent::Graphical(_)));
+            // Check if current preview is graphical (either Graphical or Kitty)
+            let is_current_graphical = matches!(
+                &self.preview_content,
+                Some(PreviewContent::Graphical(_)) | Some(PreviewContent::Kitty(_))
+            );
 
             if !is_current_graphical {
                 use std::io::Write;
@@ -1019,6 +1021,103 @@ impl ChafaTui {
                 let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
                 let _ = std::io::stdout().write_all(delete_all_cmd.as_bytes());
                 let _ = std::io::stdout().flush();
+            }
+        }
+    }
+
+    /// Render Kitty graphics after ratatui's frame is drawn
+    /// This must be called AFTER terminal.draw() to avoid being overwritten
+    pub fn render_kitty_post_draw(&mut self) {
+        #[cfg(not(test))]
+        {
+            // Check if we have a Kitty preview to render
+            let has_kitty = matches!(&self.preview_content, Some(PreviewContent::Kitty(_)));
+            if has_kitty {
+                eprintln!("[APP] render_kitty_post_draw called with Kitty content");
+            }
+            if let Some(PreviewContent::Kitty(ref kitty_rc)) = self.preview_content {
+                let mut kitty = kitty_rc.borrow_mut();
+
+                // Reset rendered flag to allow re-rendering
+                kitty.rendered = false;
+
+                // Calculate position based on mode
+                let (render_x, render_y, width, height) = if self.is_slideshow_mode {
+                    // Slideshow mode: full screen with status bar at bottom
+                    let image_area = ratatui::layout::Rect::new(
+                        0,
+                        0,
+                        self.terminal_width,
+                        self.terminal_height.saturating_sub(3), // Reserve 3 rows for status bar
+                    );
+
+                    let img_aspect = kitty.img_width as f32 / kitty.img_height as f32;
+                    let font_width = kitty.font_size.0 as f32;
+                    let font_height = kitty.font_size.1 as f32;
+                    let char_aspect = font_height / font_width;
+
+                    let display_width_cells =
+                        (image_area.height as f32 * img_aspect * char_aspect) as u16;
+
+                    let (w, h) = if display_width_cells <= image_area.width {
+                        (display_width_cells, image_area.height)
+                    } else {
+                        let display_height =
+                            (image_area.width as f32 / img_aspect / char_aspect) as u16;
+                        (image_area.width, display_height.min(image_area.height))
+                    };
+
+                    let x_offset = (image_area.width.saturating_sub(w)) / 2;
+                    (image_area.x + x_offset, image_area.y, w, h)
+                } else {
+                    // Normal mode: use preview area from layout
+                    let (_, preview_area, _) =
+                        self.ui_layout
+                            .calculate_layout(ratatui::layout::Rect::new(
+                                0,
+                                0,
+                                self.terminal_width,
+                                self.terminal_height,
+                            ));
+
+                    // Account for border
+                    let inner_area = ratatui::layout::Rect::new(
+                        preview_area.x + 1,
+                        preview_area.y + 1,
+                        preview_area.width.saturating_sub(2),
+                        preview_area.height.saturating_sub(2),
+                    );
+
+                    let img_aspect = kitty.img_width as f32 / kitty.img_height as f32;
+                    let font_width = kitty.font_size.0 as f32;
+                    let font_height = kitty.font_size.1 as f32;
+                    let char_aspect = font_height / font_width;
+
+                    let display_width_cells =
+                        (inner_area.height as f32 * img_aspect * char_aspect) as u16;
+
+                    let (w, h) = if display_width_cells <= inner_area.width {
+                        (display_width_cells, inner_area.height)
+                    } else {
+                        let display_height =
+                            (inner_area.width as f32 / img_aspect / char_aspect) as u16;
+                        (inner_area.width, display_height.min(inner_area.height))
+                    };
+
+                    let x_offset = (inner_area.width.saturating_sub(w)) / 2;
+                    (inner_area.x + x_offset, inner_area.y, w, h)
+                };
+
+                // Update display dimensions
+                kitty.display_width = width as u32;
+                kitty.display_height = height as u32;
+
+                // Render the Kitty image (now AFTER ratatui has flushed)
+                if let Err(e) =
+                    crate::preview::PreviewManager::print_kitty_image(&mut kitty, render_x, render_y)
+                {
+                    eprintln!("[KITTY] Post-draw render error: {}", e);
+                }
             }
         }
     }
