@@ -7,7 +7,6 @@ pub mod localization;
 pub mod preview;
 pub mod transitions;
 pub mod ui;
-pub mod viuer_protocol;
 
 #[cfg(test)]
 mod test_utils;

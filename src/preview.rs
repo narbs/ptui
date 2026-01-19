@@ -3,10 +3,11 @@ use crate::converter::{self, AsciiConverter};
 use crate::fast_image_loader::FastImageLoader;
 use crate::file_browser::FileItem;
 use crate::localization::Localization;
-use crate::viuer_protocol::ViuerKittyProtocol;
 use ansi_to_tui::IntoText;
 use ratatui::text::Text;
 use ratatui_image::picker::Picker;
+#[cfg(not(test))]
+use ratatui_image::picker::ProtocolType;
 use ratatui_image::protocol::StatefulProtocol;
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -41,7 +42,7 @@ pub struct GraphicalPreview {
     pub height: u16,
     pub img_width: u32,  // Actual image pixel width
     pub img_height: u32, // Actual image pixel height
-    pub protocol: Box<dyn StatefulProtocol>,
+    pub protocol: StatefulProtocol,
     pub protocol_type: TerminalGraphicsSupport, // Track which protocol is being used
     pub font_size: (u16, u16),                  // Font size for iTerm2 cell calculations
 }
@@ -74,7 +75,7 @@ impl PreviewManager {
         );
 
         // Cache font size for later use
-        let font_size = picker.as_ref().map(|p| p.font_size).unwrap_or((14, 28)); // Default fallback
+        let font_size = picker.as_ref().map(|p| p.font_size()).unwrap_or((14, 28)); // Default fallback
 
         #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
@@ -130,54 +131,45 @@ impl PreviewManager {
 
         #[cfg(not(test))]
         {
-            // Try to create a picker and detect protocol
-            match Picker::from_termios() {
-                Ok(mut picker) => {
-                    picker.guess_protocol();
+            // Try to create a picker and detect protocol using ratatui-image's detection
+            match Picker::from_query_stdio() {
+                Ok(picker) => {
+                    // Get the font size for debug output
+                    #[allow(unused_variables)]
+                    let font_size = picker.font_size();
 
-                    // Check what protocol was detected
-                    // The picker stores the detected protocol internally
                     #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!("[GRAPHICS] Picker created successfully");
                     #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!(
                         "[GRAPHICS] Font size: {}x{}",
-                        picker.font_size.0, picker.font_size.1
+                        font_size.0, font_size.1
                     );
-
-                    // Check environment variables and protocol detection
-                    let term = std::env::var("TERM").unwrap_or_default();
-                    let term_program = std::env::var("TERM_PROGRAM").unwrap_or_default();
-
                     #[cfg(all(not(test), feature = "debug-output"))]
-                    eprintln!("[GRAPHICS] TERM={}", term);
-                    #[cfg(all(not(test), feature = "debug-output"))]
-                    eprintln!("[GRAPHICS] TERM_PROGRAM={}", term_program);
+                    eprintln!("[GRAPHICS] Detected protocol: {:?}", picker.protocol_type());
 
-                    // Determine support based on terminal type
-                    // Kitty protocol is supported by: Kitty, Ghostty, WezTerm
-                    let support = if term.contains("kitty")
-                        || term_program.contains("ghostty")
-                        || term_program.contains("WezTerm")
-                    {
-                        #[cfg(all(not(test), feature = "debug-output"))]
-                        eprintln!("[GRAPHICS] Detected Kitty protocol support");
-                        TerminalGraphicsSupport::Kitty
-                    } else if term_program.contains("iTerm") || term_program == "iTerm.app" {
-                        #[cfg(all(not(test), feature = "debug-output"))]
-                        eprintln!("[GRAPHICS] Detected iTerm2 inline images support");
-                        TerminalGraphicsSupport::Iterm2
-                    } else if term.contains("xterm") && picker.font_size != (0, 0) {
-                        // Sixel support - check if terminal might support it
-                        #[cfg(all(not(test), feature = "debug-output"))]
-                        eprintln!(
-                            "[GRAPHICS] Possible Sixel support, but falling back to text for now"
-                        );
-                        TerminalGraphicsSupport::None
-                    } else {
-                        #[cfg(all(not(test), feature = "debug-output"))]
-                        eprintln!("[GRAPHICS] No graphics protocol detected, using text mode");
-                        TerminalGraphicsSupport::None
+                    // Map ratatui-image's ProtocolType to our TerminalGraphicsSupport
+                    let support = match picker.protocol_type() {
+                        ProtocolType::Kitty => {
+                            #[cfg(all(not(test), feature = "debug-output"))]
+                            eprintln!("[GRAPHICS] Using Kitty protocol");
+                            TerminalGraphicsSupport::Kitty
+                        }
+                        ProtocolType::Iterm2 => {
+                            #[cfg(all(not(test), feature = "debug-output"))]
+                            eprintln!("[GRAPHICS] Using iTerm2 protocol");
+                            TerminalGraphicsSupport::Iterm2
+                        }
+                        ProtocolType::Sixel => {
+                            #[cfg(all(not(test), feature = "debug-output"))]
+                            eprintln!("[GRAPHICS] Sixel detected but not yet fully supported, using anyway");
+                            TerminalGraphicsSupport::Sixel
+                        }
+                        ProtocolType::Halfblocks => {
+                            #[cfg(all(not(test), feature = "debug-output"))]
+                            eprintln!("[GRAPHICS] No graphics protocol detected, using text mode");
+                            TerminalGraphicsSupport::None
+                        }
                     };
 
                     (support, Some(picker))
@@ -385,43 +377,35 @@ impl PreviewManager {
                     // Create protocol based on terminal support
                     #[cfg(all(not(test), feature = "debug-output"))]
                     let protocol_start = Instant::now();
-                    // Generate unique ID based on file path hash
-                    use std::collections::hash_map::DefaultHasher;
-                    use std::hash::{Hash, Hasher};
-                    let mut hasher = DefaultHasher::new();
-                    path.hash(&mut hasher);
-                    let unique_id = (hasher.finish() % 255) as u8;
 
-                    // Track final image dimensions (may differ for iTerm2 if resized)
+                    // Track final image dimensions (may differ if resized)
                     let mut final_img_w = original_w;
                     let mut final_img_h = original_h;
 
-                    let protocol: Box<dyn StatefulProtocol> = match self.graphics_support {
+                    let protocol: StatefulProtocol = match self.graphics_support {
                         TerminalGraphicsSupport::Kitty => {
                             #[cfg(all(not(test), feature = "debug-output"))]
-                            eprintln!("[PROTOCOL] Using Kitty protocol");
-                            // Calculate actual character aspect ratio from font metrics
-                            let font_width = self.font_size.0 as f32;
-                            let font_height = self.font_size.1 as f32;
-                            let char_aspect = if font_width > 0.0 {
-                                font_height / font_width
+                            eprintln!("[PROTOCOL] Using Kitty protocol via ratatui-image");
+                            if let Some(ref picker) = self.picker {
+                                picker.new_resize_protocol(img)
                             } else {
-                                2.0
-                            };
-                            Box::new(ViuerKittyProtocol::new_with_config(
-                                img,
-                                unique_id,
-                                self.graphical_max_dimension,
-                                char_aspect,
-                            ))
+                                #[cfg(all(not(test), feature = "debug-output"))]
+                                eprintln!("[PROTOCOL] No picker available, falling back to text");
+                                return PreviewContent::Text(self.render_with_converter(
+                                    path,
+                                    converter_width,
+                                    converter_height,
+                                ));
+                            }
                         }
                         TerminalGraphicsSupport::Iterm2 => {
                             #[cfg(all(not(test), feature = "debug-output"))]
                             eprintln!("[PROTOCOL] Using iTerm2 protocol via ratatui-image");
                             // Pre-resize image to fill the available pixel space
-                            if let Some(ref mut picker) = self.picker {
-                                let font_width = picker.font_size.0 as u32;
-                                let font_height = picker.font_size.1 as u32;
+                            if let Some(ref picker) = self.picker {
+                                let font_size = picker.font_size();
+                                let font_width = font_size.0 as u32;
+                                let font_height = font_size.1 as u32;
 
                                 // Use converter_width/height (the preview area dimensions in cells)
                                 let target_width_px = converter_width as u32 * font_width;

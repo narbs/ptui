@@ -299,7 +299,7 @@ impl UIRenderer {
                 };
 
                 // Use Fit to fill available space
-                let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
+                let image_widget = StatefulImage::new().resize(Resize::Fit(None));
                 f.render_stateful_widget(
                     image_widget,
                     centered_area,
@@ -463,7 +463,7 @@ impl UIRenderer {
                         )
                     };
 
-                let image_widget = StatefulImage::new(None).resize(Resize::Fit(None));
+                let image_widget = StatefulImage::new().resize(Resize::Fit(None));
                 f.render_stateful_widget(
                     image_widget,
                     centered_area,

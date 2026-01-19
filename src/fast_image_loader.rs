@@ -5,6 +5,7 @@ pub struct FastImageLoader;
 
 impl FastImageLoader {
     /// Load image with optimal strategy based on format and target size
+    #[allow(unused_variables)]
     pub fn load_for_display(path: &str, target_max_dimension: u32) -> Result<DynamicImage, String> {
         #[cfg(all(not(test), feature = "debug-output"))]
         use std::time::Instant;
@@ -24,13 +25,14 @@ impl FastImageLoader {
             {
                 Self::load_jpeg_turbojpeg(path, target_max_dimension).or_else(|e| {
                     #[cfg(not(test))]
-                    eprintln!("[TURBOJPEG] Failed: {}, falling back to zune-jpeg", e);
-                    Self::load_jpeg_zune(path, target_max_dimension)
+                    eprintln!("[TURBOJPEG] Failed: {}, falling back to image crate", e);
+                    Self::load_with_image_crate(path)
                 })
             }
             #[cfg(not(feature = "fast-jpeg"))]
             {
-                Self::load_jpeg_zune(path, target_max_dimension)
+                // Fallback to image crate when turbojpeg is not available
+                Self::load_with_image_crate(path)
             }
         } else {
             // Fallback: Use image crate for PNG, GIF, etc.
@@ -48,7 +50,7 @@ impl FastImageLoader {
                     }
                     #[cfg(not(feature = "fast-jpeg"))]
                     {
-                        "zune-jpeg"
+                        "image-crate"
                     }
                 } else {
                     "image-crate"
@@ -154,44 +156,6 @@ impl FastImageLoader {
         let img_buffer =
             image::RgbImage::from_raw(output_width as u32, output_height as u32, output_buf)
                 .ok_or_else(|| "Failed to create image buffer".to_string())?;
-
-        Ok(DynamicImage::ImageRgb8(img_buffer))
-    }
-
-    /// Load JPEG with zune-jpeg (faster than image crate, fallback)
-    fn load_jpeg_zune(path: &str, _target_max_dimension: u32) -> Result<DynamicImage, String> {
-        use std::fs;
-        use zune_jpeg::JpegDecoder;
-        use zune_jpeg::zune_core::colorspace::ColorSpace;
-        use zune_jpeg::zune_core::options::DecoderOptions;
-
-        // Read file into memory
-        let buffer = fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
-
-        // Configure decoder for RGB output
-        let options = DecoderOptions::default().jpeg_set_out_colorspace(ColorSpace::RGB);
-
-        // Create decoder with options
-        let mut decoder = JpegDecoder::new_with_options(&buffer, options);
-
-        // Decode
-        let pixels = decoder
-            .decode()
-            .map_err(|e| format!("JPEG decode failed: {:?}", e))?;
-
-        // Get output dimensions after decode
-        let info = decoder
-            .info()
-            .ok_or_else(|| "Failed to get decoder info".to_string())?;
-        let width = info.width as u32;
-        let height = info.height as u32;
-
-        #[cfg(all(not(test), feature = "debug-output"))]
-        eprintln!("[ZUNE-JPEG] Decoded: {}x{}", width, height);
-
-        // Convert to DynamicImage
-        let img_buffer = image::RgbImage::from_raw(width, height, pixels)
-            .ok_or_else(|| "Failed to create image buffer from zune-jpeg output".to_string())?;
 
         Ok(DynamicImage::ImageRgb8(img_buffer))
     }

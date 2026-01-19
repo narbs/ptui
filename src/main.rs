@@ -7,7 +7,6 @@ mod localization;
 mod preview;
 mod transitions;
 mod ui;
-mod viuer_protocol;
 
 #[cfg(test)]
 mod test_utils;

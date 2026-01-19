@@ -150,11 +150,10 @@ impl GraphicalConverter {
 
         #[cfg(not(test))]
         {
-            // Try protocol detection
-            let mut picker =
-                Picker::from_termios().map_err(|e| format!("Failed to create picker: {:?}", e))?;
-            picker.guess_protocol();
-            let protocol_type = picker.protocol_type;
+            // Try protocol detection using ratatui-image's detection
+            let picker = Picker::from_query_stdio()
+                .map_err(|e| format!("Failed to create picker: {:?}", e))?;
+            let protocol_type = picker.protocol_type();
 
             // Always create fallback converter
             let fallback_converter = Box::new(ChafaConverter::new(fallback_config));
