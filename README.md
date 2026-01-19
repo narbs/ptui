@@ -45,14 +45,14 @@ From Source on Arch Linux:
     git clone https://github.com/narbs/ptui.git; cd ptui
     yay -S cargo
     cargo build --features fast-jpeg --release
-    cargo install --path .
+    cargo install --locked --path .
 
 From Source on Mac:
 
     git clone https://github.com/narbs/ptui.git; cd ptui
     brew install rust
     cargo build --features fast-jpeg --release
-    cargo install --path .
+    cargo install --locked --path .
 
 From AUR (Arch Linux):
 
