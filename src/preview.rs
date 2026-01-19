@@ -379,7 +379,9 @@ impl PreviewManager {
                     let protocol_start = Instant::now();
 
                     // Track final image dimensions (may differ if resized)
+                    #[allow(unused_assignments)]
                     let mut final_img_w = original_w;
+                    #[allow(unused_assignments)]
                     let mut final_img_h = original_h;
 
                     let protocol: StatefulProtocol = match self.graphics_support {
@@ -387,7 +389,55 @@ impl PreviewManager {
                             #[cfg(all(not(test), feature = "debug-output"))]
                             eprintln!("[PROTOCOL] Using Kitty protocol via ratatui-image");
                             if let Some(ref picker) = self.picker {
-                                picker.new_resize_protocol(img)
+                                // Pre-downscale image to reduce encoding time
+                                // Calculate target size based on terminal area and font size
+                                let font_size = picker.font_size();
+                                let font_width = font_size.0 as u32;
+                                let font_height = font_size.1 as u32;
+
+                                // Target pixel dimensions based on preview area
+                                let target_width_px = converter_width as u32 * font_width;
+                                let target_height_px = converter_height as u32 * font_height;
+
+                                // Calculate resize dimensions maintaining aspect ratio
+                                let img_aspect = original_w as f32 / original_h as f32;
+                                let target_aspect = target_width_px as f32 / target_height_px as f32;
+
+                                let (resize_width, resize_height) = if img_aspect > target_aspect {
+                                    // Image is wider - fit to width
+                                    let w = target_width_px.min(original_w);
+                                    let h = (w as f32 / img_aspect) as u32;
+                                    (w, h)
+                                } else {
+                                    // Image is taller - fit to height
+                                    let h = target_height_px.min(original_h);
+                                    let w = (h as f32 * img_aspect) as u32;
+                                    (w, h)
+                                };
+
+                                #[cfg(all(not(test), feature = "debug-output"))]
+                                eprintln!(
+                                    "[KITTY] Pre-downscaling {}x{} -> {}x{} (target area {}x{}px)",
+                                    original_w, original_h, resize_width, resize_height,
+                                    target_width_px, target_height_px
+                                );
+
+                                // Only resize if image is larger than target
+                                let final_img = if resize_width < original_w || resize_height < original_h {
+                                    img.resize(
+                                        resize_width,
+                                        resize_height,
+                                        image::imageops::FilterType::Triangle, // Fast filter
+                                    )
+                                } else {
+                                    img
+                                };
+
+                                // Update final dimensions
+                                final_img_w = final_img.width();
+                                final_img_h = final_img.height();
+
+                                picker.new_resize_protocol(final_img)
                             } else {
                                 #[cfg(all(not(test), feature = "debug-output"))]
                                 eprintln!("[PROTOCOL] No picker available, falling back to text");

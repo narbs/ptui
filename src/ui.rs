@@ -267,39 +267,54 @@ impl UIRenderer {
                         height,
                     }
                 } else {
-                    // Kitty/Ghostty: Use actual font metrics for aspect ratio compensation
+                    // Kitty/Ghostty: Fill vertical space, center horizontally
+                    // Calculate display size based on image aspect ratio fitting to full height
+                    let img_aspect = graphical_borrow.img_width as f32 / graphical_borrow.img_height as f32;
+
+                    // Use full available height, calculate width from aspect ratio
                     let font_width = graphical_borrow.font_size.0 as f32;
                     let font_height = graphical_borrow.font_size.1 as f32;
-                    let char_aspect = if font_width > 0.0 {
-                        font_height / font_width
+                    let char_aspect = font_height / font_width;
+
+                    // Calculate width needed to display at full height while preserving aspect ratio
+                    // Account for character aspect ratio (cells are taller than wide in pixels)
+                    let display_width = (inner_area.height as f32 * img_aspect * char_aspect) as u16;
+
+                    let (width, height) = if display_width <= inner_area.width {
+                        // Image fits horizontally at full height
+                        (display_width, inner_area.height)
                     } else {
-                        2.0
+                        // Image is too wide, fit to width instead
+                        let display_height = (inner_area.width as f32 / img_aspect / char_aspect) as u16;
+                        (inner_area.width, display_height.min(inner_area.height))
                     };
 
-                    let centered = Self::calculate_centered_image_area_with_aspect(
-                        inner_area,
-                        graphical_borrow.img_width,
-                        graphical_borrow.img_height,
-                        char_aspect,
-                    );
+                    // Center horizontally only (use full vertical space)
+                    let x_offset = (inner_area.width.saturating_sub(width)) / 2;
+
                     #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!(
-                        "[UI] Kitty: Image {}x{}px, Area {}x{} cells, Font {}x{}px (aspect {:.2}), Centered {}x{} cells",
+                        "[UI] Kitty: Image {}x{}px (aspect {:.2}), Display {}x{} cells, Area {}x{}, x_offset {}",
                         graphical_borrow.img_width,
                         graphical_borrow.img_height,
+                        img_aspect,
+                        width,
+                        height,
                         inner_area.width,
                         inner_area.height,
-                        font_width,
-                        font_height,
-                        char_aspect,
-                        centered.width,
-                        centered.height
+                        x_offset
                     );
-                    centered
+
+                    Rect {
+                        x: inner_area.x + x_offset,
+                        y: inner_area.y,
+                        width,
+                        height,
+                    }
                 };
 
                 // Use Fit to fill available space
-                let image_widget = StatefulImage::new().resize(Resize::Fit(None));
+                let image_widget = StatefulImage::new().resize(Resize::Scale(None));
                 f.render_stateful_widget(
                     image_widget,
                     centered_area,
@@ -446,24 +461,32 @@ impl UIRenderer {
                             height,
                         }
                     } else {
-                        // Kitty/Ghostty: Use actual font metrics for aspect ratio compensation
+                        // Kitty/Ghostty: Fill vertical space, center horizontally
+                        let img_aspect = graphical_borrow.img_width as f32 / graphical_borrow.img_height as f32;
                         let font_width = graphical_borrow.font_size.0 as f32;
                         let font_height = graphical_borrow.font_size.1 as f32;
-                        let char_aspect = if font_width > 0.0 {
-                            font_height / font_width
+                        let char_aspect = font_height / font_width;
+
+                        let display_width = (chunks[0].height as f32 * img_aspect * char_aspect) as u16;
+
+                        let (width, height) = if display_width <= chunks[0].width {
+                            (display_width, chunks[0].height)
                         } else {
-                            2.0
+                            let display_height = (chunks[0].width as f32 / img_aspect / char_aspect) as u16;
+                            (chunks[0].width, display_height.min(chunks[0].height))
                         };
 
-                        Self::calculate_centered_image_area_with_aspect(
-                            chunks[0],
-                            graphical_borrow.img_width,
-                            graphical_borrow.img_height,
-                            char_aspect,
-                        )
+                        let x_offset = (chunks[0].width.saturating_sub(width)) / 2;
+
+                        Rect {
+                            x: chunks[0].x + x_offset,
+                            y: chunks[0].y,
+                            width,
+                            height,
+                        }
                     };
 
-                let image_widget = StatefulImage::new().resize(Resize::Fit(None));
+                let image_widget = StatefulImage::new().resize(Resize::Scale(None));
                 f.render_stateful_widget(
                     image_widget,
                     centered_area,
@@ -546,46 +569,6 @@ impl UIRenderer {
             .style(Style::default().fg(Color::Yellow));
 
         f.render_widget(dialog_paragraph, popup_area);
-    }
-
-    /// Calculate a horizontally-centered area for an image based on its aspect ratio
-    fn calculate_centered_image_area_with_aspect(
-        area: Rect,
-        img_width: u32,
-        img_height: u32,
-        char_aspect: f32,
-    ) -> Rect {
-        if img_width == 0 || img_height == 0 {
-            return area;
-        }
-
-        // Calculate image aspect ratio
-        let img_aspect = img_width as f32 / img_height as f32;
-
-        // Calculate fitted dimensions in character cells
-        let area_aspect = (area.width as f32) / (area.height as f32 * char_aspect);
-
-        let (fitted_width, fitted_height) = if img_aspect > area_aspect {
-            // Image is wider - fit to width
-            let fitted_width = area.width;
-            let fitted_height = (area.width as f32 / img_aspect / char_aspect) as u16;
-            (fitted_width, fitted_height.min(area.height))
-        } else {
-            // Image is taller - fit to height
-            let fitted_height = area.height;
-            let fitted_width = (area.height as f32 * char_aspect * img_aspect) as u16;
-            (fitted_width.min(area.width), fitted_height)
-        };
-
-        // Center horizontally by calculating offset
-        let x_offset = (area.width.saturating_sub(fitted_width)) / 2;
-
-        Rect {
-            x: area.x + x_offset,
-            y: area.y,
-            width: fitted_width,
-            height: fitted_height,
-        }
     }
 }
 
