@@ -605,6 +605,10 @@ impl PreviewManager {
 
                             // Calculate display dimensions in cells, preserving aspect ratio
                             // Account for character cell aspect ratio (chars are taller than wide)
+                            // Subtract 2 rows for border (top and bottom)
+                            let available_height = converter_height.saturating_sub(2) as f32;
+                            let available_width = converter_width.saturating_sub(2) as f32;
+
                             let img_aspect = img_w as f32 / img_h as f32;
                             let font_width = self.font_size.0 as f32;
                             let font_height = self.font_size.1 as f32;
@@ -612,17 +616,17 @@ impl PreviewManager {
 
                             // Calculate how many columns needed if we use full height
                             let cols_for_full_height =
-                                (converter_height as f32 * img_aspect * char_aspect) as u32;
+                                (available_height * img_aspect * char_aspect) as u32;
 
                             let (display_width, display_height) =
-                                if cols_for_full_height <= converter_width as u32 {
+                                if cols_for_full_height <= available_width as u32 {
                                     // Image fits width-wise, use full height
-                                    (cols_for_full_height, converter_height as u32)
+                                    (cols_for_full_height, available_height as u32)
                                 } else {
                                     // Image too wide, fit to width and calculate height
                                     let rows_for_full_width =
-                                        (converter_width as f32 / img_aspect / char_aspect) as u32;
-                                    (converter_width as u32, rows_for_full_width)
+                                        (available_width / img_aspect / char_aspect) as u32;
+                                    (available_width as u32, rows_for_full_width)
                                 };
 
                             // Use direct data method (more reliable across terminals)
