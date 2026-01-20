@@ -306,7 +306,7 @@ impl PreviewManager {
         let mut stdout = stdout();
 
         // Save cursor position
-        // write!(stdout, "\x1b[s")?;
+        write!(stdout, "\x1b[s")?;
 
         // First, delete any existing image at this location (Kitty graphics can stack)
         // Using 'a=d' with 'd=a' deletes all images
@@ -333,7 +333,7 @@ impl PreviewManager {
         }
 
         // Restore cursor position to avoid interfering with other renders
-        // write!(stdout, "\x1b[u")?;
+        write!(stdout, "\x1b[u")?;
 
         stdout.flush()?;
         preview.rendered = true;
