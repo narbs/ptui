@@ -757,6 +757,7 @@ impl ChafaTui {
         self.is_slideshow_mode = true;
         self.update_slideshow_preview();
         self.slideshow_last_change = Instant::now();
+        self.needs_redraw = true;
     }
 
     fn exit_slideshow_mode(&mut self) {
