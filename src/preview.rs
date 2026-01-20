@@ -172,10 +172,7 @@ impl PreviewManager {
 
                     // Map ratatui-image's ProtocolType to our TerminalGraphicsSupport
                     let support = match picker.protocol_type() {
-                        ProtocolType::Kitty => {
-                            eprintln!("[GRAPHICS] Detected Kitty protocol");
-                            TerminalGraphicsSupport::Kitty
-                        }
+                        ProtocolType::Kitty => TerminalGraphicsSupport::Kitty,
                         ProtocolType::Iterm2 => {
                             #[cfg(all(not(test), feature = "debug-output"))]
                             eprintln!("[GRAPHICS] Using iTerm2 protocol");
@@ -250,53 +247,7 @@ impl PreviewManager {
         capped
     }
 
-    /// Encode image to Kitty format using temp file (fast local method)
-    /// Returns the temp file path and display dimensions
-    fn encode_kitty_local(
-        img: &DynamicImage,
-        _display_width: u32,
-        _display_height: u32,
-    ) -> Result<String, String> {
-        let rgba = img.to_rgba8();
-        let raw_img = rgba.as_raw();
-
-        // Create temp file
-        let mut tmpfile = tempfile::Builder::new()
-            .prefix(".ptui-kitty.")
-            .rand_bytes(4)
-            .tempfile()
-            .map_err(|e| format!("Failed to create temp file: {}", e))?;
-
-        tmpfile
-            .write_all(raw_img)
-            .map_err(|e| format!("Failed to write to temp file: {}", e))?;
-        tmpfile
-            .flush()
-            .map_err(|e| format!("Failed to flush temp file: {}", e))?;
-
-        // Keep the file (don't delete on drop) - Kitty will delete it
-        let path = tmpfile
-            .path()
-            .to_str()
-            .ok_or("Invalid temp file path")?
-            .to_string();
-
-        // Persist the temp file so it's not deleted when tmpfile goes out of scope
-        let _ = tmpfile.keep();
-
-        #[cfg(all(not(test), feature = "debug-output"))]
-        eprintln!(
-            "[KITTY-LOCAL] Encoded {}x{} image to temp file, display {}x{} cells",
-            img.width(),
-            img.height(),
-            display_width,
-            display_height
-        );
-
-        Ok(path)
-    }
-
-    /// Encode image to Kitty escape sequence (for remote/fallback)
+    /// Encode image to Kitty escape sequence for direct transmission
     fn encode_kitty_remote(
         img: &DynamicImage,
         display_width: u32,
@@ -344,18 +295,13 @@ impl PreviewManager {
         result
     }
 
-    /// Print Kitty image at position using temp file method
+    /// Print Kitty image at position
     pub fn print_kitty_image(
         preview: &mut KittyPreview,
         x: u16,
         y: u16,
     ) -> std::io::Result<()> {
         use std::io::stdout;
-
-        eprintln!(
-            "[KITTY-RENDER] Called with pos ({}, {}), img {}x{}, display {}x{}",
-            x, y, preview.img_width, preview.img_height, preview.display_width, preview.display_height
-        );
 
         let mut stdout = stdout();
 
@@ -367,19 +313,8 @@ impl PreviewManager {
         write!(stdout, "\x1b[{};{}H", y + 1, x + 1)?;
 
         if let Some(ref path) = preview.temp_file_path {
-            // Check if file exists and get its size
-            let file_exists = std::path::Path::new(path).exists();
-            let file_size = std::fs::metadata(path).map(|m| m.len()).unwrap_or(0);
-            eprintln!(
-                "[KITTY-RENDER] Temp file: {}, exists: {}, size: {} bytes",
-                path, file_exists, file_size
-            );
-
             // Local method - send file path to Kitty
-            // Use viuer's parameter order: f, s, v, c, r, a, t, q
             let encoded_path = general_purpose::STANDARD.encode(path);
-            eprintln!("[KITTY-RENDER] Encoded path length: {}", encoded_path.len());
-
             write!(
                 stdout,
                 "\x1b_Gf=32,s={},v={},c={},r={},a=T,t=t,q=2;{}\x1b\\",
@@ -390,16 +325,12 @@ impl PreviewManager {
                 encoded_path
             )?;
         } else if let Some(ref seq) = preview.escape_sequence {
-            eprintln!("[KITTY-RENDER] Using escape sequence, length: {}", seq.len());
             // Remote method - write pre-encoded sequence
             write!(stdout, "{}", seq)?;
-        } else {
-            eprintln!("[KITTY-RENDER] No temp file or escape sequence!");
         }
 
         stdout.flush()?;
         preview.rendered = true;
-        eprintln!("[KITTY-RENDER] Flush complete");
 
         Ok(())
     }
@@ -630,13 +561,8 @@ impl PreviewManager {
                                 };
 
                             // Use direct data method (more reliable across terminals)
-                            eprintln!(
-                                "[KITTY-FAST] Creating Kitty preview for {}x{} image, display {}x{} cells",
-                                img_w, img_h, display_width, display_height
-                            );
                             let escape_seq =
                                 Self::encode_kitty_remote(&final_img, display_width, display_height);
-                            eprintln!("[KITTY-FAST] Encoded escape sequence, {} bytes", escape_seq.len());
                             let kitty_preview = KittyPreview {
                                 img_width: img_w,
                                 img_height: img_h,

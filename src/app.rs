@@ -722,7 +722,6 @@ impl ChafaTui {
     }
 
     fn enter_slideshow_mode(&mut self) {
-        eprintln!("[SLIDESHOW] Entering slideshow mode...");
         // Build list of image files starting from current selection
         self.slideshow_image_files.clear();
         self.slideshow_start_index = self.file_browser.selected_index;
@@ -733,11 +732,9 @@ impl ChafaTui {
                 self.slideshow_image_files.push(i);
             }
         }
-        eprintln!("[SLIDESHOW] Found {} image files", self.slideshow_image_files.len());
 
         if self.slideshow_image_files.is_empty() {
             // No images to show slideshow
-            eprintln!("[SLIDESHOW] No images, exiting");
             return;
         }
 
@@ -759,9 +756,7 @@ impl ChafaTui {
 
         self.is_slideshow_mode = true;
         self.slideshow_last_change = Instant::now();
-        eprintln!("[SLIDESHOW] About to update preview...");
         self.update_slideshow_preview();
-        eprintln!("[SLIDESHOW] Preview updated, slideshow mode active");
     }
 
     fn exit_slideshow_mode(&mut self) {
@@ -783,26 +778,20 @@ impl ChafaTui {
     }
 
     fn advance_slideshow(&mut self) {
-        eprintln!("[SLIDESHOW] advance_slideshow called");
         if !self.is_slideshow_mode || self.slideshow_image_files.is_empty() {
             return;
         }
 
         // Store current content for potential transition
-        eprintln!("[SLIDESHOW] Cloning previous content...");
         self.slideshow_previous_content = self.preview_content.clone();
-        eprintln!("[SLIDESHOW] Previous content cloned");
 
         self.slideshow_current_index =
             (self.slideshow_current_index + 1) % self.slideshow_image_files.len();
         self.slideshow_last_change = Instant::now();
-        eprintln!("[SLIDESHOW] Updating preview...");
         self.update_slideshow_preview();
-        eprintln!("[SLIDESHOW] Preview updated");
 
         // Check if we should start a transition effect
         // Transitions only work with Text content (ASCII art), not graphical content
-        eprintln!("[SLIDESHOW] Checking transitions...");
         if self.transition_manager.is_enabled()
             && self.preview_manager.converter_supports_transitions()
             && let (Some(prev_content), Some(new_content)) =
@@ -821,7 +810,6 @@ impl ChafaTui {
                 self.transition_manager.get_effect_name()
             );
         }
-        eprintln!("[SLIDESHOW] Transitions checked, advance_slideshow complete");
     }
 
     fn slideshow_go_backward(&mut self) {
@@ -870,10 +858,11 @@ impl ChafaTui {
 
         let file_index = self.slideshow_image_files[self.slideshow_current_index];
         if let Some(file) = self.file_browser.files.get(file_index) {
+            // Slideshow uses full screen minus status bar (3 rows)
             self.preview_content = Some(self.preview_manager.generate_preview(
                 file,
-                self.terminal_width.saturating_sub(4),
-                self.terminal_height.saturating_sub(4),
+                self.terminal_width,
+                self.terminal_height.saturating_sub(3),
                 0, // No text scrolling in slideshow mode
                 &self.localization,
             ));
@@ -1043,10 +1032,6 @@ impl ChafaTui {
         #[cfg(not(test))]
         {
             // Check if we have a Kitty preview to render
-            let has_kitty = matches!(&self.preview_content, Some(PreviewContent::Kitty(_)));
-            if has_kitty {
-                eprintln!("[APP] render_kitty_post_draw called with Kitty content");
-            }
             if let Some(PreviewContent::Kitty(ref kitty_rc)) = self.preview_content {
                 let mut kitty = kitty_rc.borrow_mut();
 
