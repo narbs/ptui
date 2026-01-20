@@ -811,6 +811,8 @@ impl ChafaTui {
                 self.transition_manager.get_effect_name()
             );
         }
+
+        self.needs_redraw = true;
     }
 
     fn slideshow_go_backward(&mut self) {
@@ -850,6 +852,8 @@ impl ChafaTui {
                 self.transition_manager.get_effect_name()
             );
         }
+
+        self.needs_redraw = true;
     }
 
     fn update_slideshow_preview(&mut self) {
