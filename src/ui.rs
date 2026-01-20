@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::Text,
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 use ratatui_image::{Resize, StatefulImage};
 
@@ -514,9 +514,11 @@ impl UIRenderer {
             }
         }
 
-        // Render status bar
+        // Render status bar - clear first to avoid artifacts from Kitty graphics
+        f.render_widget(Clear, chunks[1]);
+
         let status_text = format!(
-            "🎞️ {} | {} {}/{} | {}",
+            "[>] {} | {} {}/{} | {}",
             localization.get("slideshow_mode"),
             localization.get("slideshow_image"),
             current_image,
