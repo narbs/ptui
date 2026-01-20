@@ -755,8 +755,8 @@ impl ChafaTui {
         }
 
         self.is_slideshow_mode = true;
-        self.slideshow_last_change = Instant::now();
         self.update_slideshow_preview();
+        self.slideshow_last_change = Instant::now();
     }
 
     fn exit_slideshow_mode(&mut self) {
