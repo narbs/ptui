@@ -235,8 +235,8 @@ impl PreviewManager {
 
         // Aggressive clamping for <500ms load times:
         // - 512: Minimum acceptable quality
-        // - 768: Maximum for fast performance (Kitty will scale up)
-        let capped = optimal.clamp(512, 768);
+        // - 1024: Maximum for fast performance (Kitty will scale up)
+        let capped = optimal.clamp(512, 1024);
 
         #[cfg(all(not(test), feature = "debug-output"))]
         eprintln!(
@@ -305,6 +305,9 @@ impl PreviewManager {
 
         let mut stdout = stdout();
 
+        // Save cursor position
+        // write!(stdout, "\x1b[s")?;
+
         // First, delete any existing image at this location (Kitty graphics can stack)
         // Using 'a=d' with 'd=a' deletes all images
         write!(stdout, "\x1b_Ga=d,d=a\x1b\\")?;
@@ -328,6 +331,9 @@ impl PreviewManager {
             // Remote method - write pre-encoded sequence
             write!(stdout, "{}", seq)?;
         }
+
+        // Restore cursor position to avoid interfering with other renders
+        // write!(stdout, "\x1b[u")?;
 
         stdout.flush()?;
         preview.rendered = true;
