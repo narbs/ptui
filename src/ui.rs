@@ -289,12 +289,13 @@ impl UIRenderer {
                         (inner_area.width, display_height.min(inner_area.height))
                     };
 
-                    // Center horizontally only (use full vertical space)
+                    // Center both horizontally and vertically
                     let x_offset = (inner_area.width.saturating_sub(width)) / 2;
+                    let y_offset = (inner_area.height.saturating_sub(height)) / 2;
 
                     #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!(
-                        "[UI] Kitty: Image {}x{}px (aspect {:.2}), Display {}x{} cells, Area {}x{}, x_offset {}",
+                        "[UI] Kitty: Image {}x{}px (aspect {:.2}), Display {}x{} cells, Area {}x{}, offset +{}+{}",
                         graphical_borrow.img_width,
                         graphical_borrow.img_height,
                         img_aspect,
@@ -302,12 +303,13 @@ impl UIRenderer {
                         height,
                         inner_area.width,
                         inner_area.height,
-                        x_offset
+                        x_offset,
+                        y_offset
                     );
 
                     Rect {
                         x: inner_area.x + x_offset,
-                        y: inner_area.y,
+                        y: inner_area.y + y_offset,
                         width,
                         height,
                     }

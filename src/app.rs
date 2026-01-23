@@ -1084,7 +1084,8 @@ impl ChafaTui {
                     };
 
                     let x_offset = (image_area.width.saturating_sub(w)) / 2;
-                    (image_area.x + x_offset, image_area.y, w, h)
+                    let y_offset = (image_area.height.saturating_sub(h)) / 2;
+                    (image_area.x + x_offset, image_area.y + y_offset, w, h)
                 } else {
                     // Normal mode: use preview area from layout
                     let (_, preview_area, _) =
@@ -1121,7 +1122,8 @@ impl ChafaTui {
                     };
 
                     let x_offset = (inner_area.width.saturating_sub(w)) / 2;
-                    (inner_area.x + x_offset, inner_area.y, w, h)
+                    let y_offset = (inner_area.height.saturating_sub(h)) / 2;
+                    (inner_area.x + x_offset, inner_area.y + y_offset, w, h)
                 };
 
                 // Update display dimensions
