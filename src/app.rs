@@ -934,10 +934,17 @@ impl ChafaTui {
             // Render components
             UIRenderer::render_file_browser(f, file_area, &mut self.file_browser, true);
 
+            // Don't render graphical preview when dialog is showing (graphics layer sits above text)
+            let preview_to_render = if self.show_delete_confirmation {
+                None
+            } else {
+                self.preview_content.as_ref()
+            };
+
             UIRenderer::render_preview(
                 f,
                 preview_area,
-                self.preview_content.as_ref(),
+                preview_to_render,
                 &self.localization,
                 self.ascii_logo.as_ref(),
                 self.is_text_file
@@ -1021,7 +1028,9 @@ impl ChafaTui {
                 Some(PreviewContent::Graphical(_)) | Some(PreviewContent::Kitty(_))
             );
 
-            if !is_current_graphical {
+            // Clear graphics if not graphical content, or if delete dialog is showing
+            // (dialog needs to appear above the graphics layer)
+            if !is_current_graphical || self.show_delete_confirmation {
                 use std::io::Write;
                 // Send Kitty protocol command to delete all images
                 let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
@@ -1036,6 +1045,11 @@ impl ChafaTui {
     pub fn render_kitty_post_draw(&mut self) {
         #[cfg(not(test))]
         {
+            // Don't render graphics when delete confirmation dialog is showing
+            if self.show_delete_confirmation {
+                return;
+            }
+
             // Check if we have a Kitty preview to render
             if let Some(PreviewContent::Kitty(ref kitty_rc)) = self.preview_content {
                 let mut kitty = kitty_rc.borrow_mut();
