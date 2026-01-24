@@ -546,9 +546,11 @@ impl PreviewManager {
                             let available_height = converter_height.saturating_sub(2) as f32;
                             let available_width = converter_width.saturating_sub(2) as f32;
 
-                            let img_aspect = img_w as f32 / img_h as f32;
-                            let font_width = self.font_size.0 as f32;
-                            let font_height = self.font_size.1 as f32;
+                            // Guard against division by zero with fallback values
+                            let safe_img_h = img_h.max(1) as f32;
+                            let img_aspect = img_w as f32 / safe_img_h;
+                            let font_width = (self.font_size.0 as f32).max(1.0);
+                            let font_height = (self.font_size.1 as f32).max(1.0);
                             let char_aspect = font_height / font_width;
 
                             // Calculate how many columns needed if we use full height
@@ -561,8 +563,11 @@ impl PreviewManager {
                                     (cols_for_full_height, available_height as u32)
                                 } else {
                                     // Image too wide, fit to width and calculate height
+                                    // Guard against division by zero
+                                    let safe_aspect = img_aspect.max(0.001);
+                                    let safe_char_aspect = char_aspect.max(0.001);
                                     let rows_for_full_width =
-                                        (available_width / img_aspect / char_aspect) as u32;
+                                        (available_width / safe_aspect / safe_char_aspect) as u32;
                                     (available_width as u32, rows_for_full_width)
                                 };
 
@@ -630,14 +635,19 @@ impl PreviewManager {
                                 }
 
                                 // Resize image to fit the display area while maintaining aspect ratio
-                                let img_aspect = original_w as f32 / original_h as f32;
+                                // Guard against division by zero with fallback values
+                                let safe_original_h = original_h.max(1) as f32;
+                                let safe_target_height_px = target_height_px.max(1) as f32;
+                                let img_aspect = original_w as f32 / safe_original_h;
                                 let target_aspect =
-                                    target_width_px as f32 / target_height_px as f32;
+                                    target_width_px as f32 / safe_target_height_px;
 
                                 let (resize_width, resize_height) = if img_aspect > target_aspect {
                                     // Image is wider - fit to width
                                     let w = target_width_px;
-                                    let h = (w as f32 / img_aspect) as u32;
+                                    // Guard against division by zero
+                                    let safe_aspect = img_aspect.max(0.001);
+                                    let h = (w as f32 / safe_aspect) as u32;
                                     (w, h.min(target_height_px))
                                 } else {
                                     // Image is taller - fit to height
@@ -645,6 +655,10 @@ impl PreviewManager {
                                     let w = (h as f32 * img_aspect) as u32;
                                     (w.min(target_width_px), h)
                                 };
+
+                                // Ensure resize dimensions are at least 1 to avoid resize_exact panic
+                                let resize_width = resize_width.max(1);
+                                let resize_height = resize_height.max(1);
 
                                 #[cfg(all(not(test), feature = "debug-output"))]
                                 eprintln!(

@@ -230,8 +230,9 @@ impl UIRenderer {
                     == TerminalGraphicsSupport::Iterm2
                 {
                     // iTerm2: Calculate exact cell dimensions based on pixel size and font size
-                    let font_width = graphical_borrow.font_size.0 as u32;
-                    let font_height = graphical_borrow.font_size.1 as u32;
+                    // Guard against division by zero with fallback values
+                    let font_width = (graphical_borrow.font_size.0 as u32).max(1);
+                    let font_height = (graphical_borrow.font_size.1 as u32).max(1);
 
                     // Calculate how many cells the resized image needs
                     let needed_width_cells =
@@ -269,11 +270,13 @@ impl UIRenderer {
                 } else {
                     // Kitty/Ghostty: Fill vertical space, center horizontally
                     // Calculate display size based on image aspect ratio fitting to full height
-                    let img_aspect = graphical_borrow.img_width as f32 / graphical_borrow.img_height as f32;
+                    // Guard against division by zero with fallback values
+                    let img_height = graphical_borrow.img_height.max(1) as f32;
+                    let img_aspect = graphical_borrow.img_width as f32 / img_height;
 
                     // Use full available height, calculate width from aspect ratio
-                    let font_width = graphical_borrow.font_size.0 as f32;
-                    let font_height = graphical_borrow.font_size.1 as f32;
+                    let font_width = (graphical_borrow.font_size.0 as f32).max(1.0);
+                    let font_height = (graphical_borrow.font_size.1 as f32).max(1.0);
                     let char_aspect = font_height / font_width;
 
                     // Calculate width needed to display at full height while preserving aspect ratio
@@ -285,7 +288,10 @@ impl UIRenderer {
                         (display_width, inner_area.height)
                     } else {
                         // Image is too wide, fit to width instead
-                        let display_height = (inner_area.width as f32 / img_aspect / char_aspect) as u16;
+                        // Guard against division by zero
+                        let safe_aspect = img_aspect.max(0.001);
+                        let safe_char_aspect = char_aspect.max(0.001);
+                        let display_height = (inner_area.width as f32 / safe_aspect / safe_char_aspect) as u16;
                         (inner_area.width, display_height.min(inner_area.height))
                     };
 
@@ -450,8 +456,9 @@ impl UIRenderer {
                 let centered_area =
                     if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
                         // iTerm2: Calculate exact cell dimensions
-                        let font_width = graphical_borrow.font_size.0 as u32;
-                        let font_height = graphical_borrow.font_size.1 as u32;
+                        // Guard against division by zero with fallback values
+                        let font_width = (graphical_borrow.font_size.0 as u32).max(1);
+                        let font_height = (graphical_borrow.font_size.1 as u32).max(1);
 
                         let needed_width_cells =
                             ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
@@ -472,9 +479,11 @@ impl UIRenderer {
                         }
                     } else {
                         // Kitty/Ghostty: Fill vertical space, center horizontally
-                        let img_aspect = graphical_borrow.img_width as f32 / graphical_borrow.img_height as f32;
-                        let font_width = graphical_borrow.font_size.0 as f32;
-                        let font_height = graphical_borrow.font_size.1 as f32;
+                        // Guard against division by zero with fallback values
+                        let img_height = graphical_borrow.img_height.max(1) as f32;
+                        let img_aspect = graphical_borrow.img_width as f32 / img_height;
+                        let font_width = (graphical_borrow.font_size.0 as f32).max(1.0);
+                        let font_height = (graphical_borrow.font_size.1 as f32).max(1.0);
                         let char_aspect = font_height / font_width;
 
                         let display_width = (chunks[0].height as f32 * img_aspect * char_aspect) as u16;
@@ -482,7 +491,10 @@ impl UIRenderer {
                         let (width, height) = if display_width <= chunks[0].width {
                             (display_width, chunks[0].height)
                         } else {
-                            let display_height = (chunks[0].width as f32 / img_aspect / char_aspect) as u16;
+                            // Guard against division by zero
+                            let safe_aspect = img_aspect.max(0.001);
+                            let safe_char_aspect = char_aspect.max(0.001);
+                            let display_height = (chunks[0].width as f32 / safe_aspect / safe_char_aspect) as u16;
                             (chunks[0].width, display_height.min(chunks[0].height))
                         };
 
