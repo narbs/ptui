@@ -30,6 +30,7 @@ pub enum TerminalGraphicsSupport {
 }
 
 #[derive(Clone)]
+#[allow(dead_code)]
 pub enum PreviewContent {
     Text(Text<'static>),
     Graphical(Rc<RefCell<GraphicalPreview>>),
@@ -38,6 +39,7 @@ pub enum PreviewContent {
 }
 
 /// Pre-encoded Kitty image for fast rendering
+#[allow(dead_code)]
 pub struct KittyPreview {
     /// Original image dimensions (for aspect ratio calculation)
     pub img_width: u32,
@@ -296,6 +298,7 @@ impl PreviewManager {
     }
 
     /// Print Kitty image at position
+    #[allow(dead_code)]
     pub fn print_kitty_image(
         preview: &mut KittyPreview,
         x: u16,
