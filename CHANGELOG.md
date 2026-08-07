@@ -8,10 +8,11 @@ PTUI 2.3.0 released. Copy and move files without leaving the browser. Press c to
 the selected file, then choose a destination folder by number: the folder you last copied or moved
 to, followed by the standard folders that exist on your system (home, desktop, downloads, documents,
 pictures, and a projects folder if you have one). The final number switches to free-text path entry,
-where ~ is expanded and relative paths resolve against the folder you are browsing. Transfers are
-confirmed before anything is written, and you are asked again before overwriting an existing file.
-The last destination is remembered between sessions, so repeating a copy to the same folder takes a
-couple of key presses. Available in all six supported languages.
+where ~ is expanded and relative paths resolve against the folder you are browsing. The transfer
+happens as soon as the folder is chosen, except when a file of the same name is already there, which
+asks for confirmation before overwriting. The last destination is remembered between sessions, so
+repeating a copy to the same folder takes a couple of key presses. Available in all six supported
+languages.
 
 Jan 23, 2026
 ------------

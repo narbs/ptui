@@ -77,9 +77,8 @@ pub enum Stage {
     ChooseDestination,
     /// Free-text path entry.
     EnterPath { input: String },
-    /// Final y/n confirmation for a validated destination.
-    Confirm { dest: PathBuf },
-    /// The destination already holds a file with the same name.
+    /// The destination already holds a file with the same name. A clear destination
+    /// needs no confirmation - choosing it transfers straight away.
     ConfirmOverwrite { dest: PathBuf },
 }
 
@@ -217,7 +216,7 @@ pub fn handle_key(dialog: &mut TransferDialog, key: KeyEvent) -> TransferAction 
             }
             _ => TransferAction::None,
         },
-        Stage::Confirm { dest } | Stage::ConfirmOverwrite { dest } => match key.code {
+        Stage::ConfirmOverwrite { dest } => match key.code {
             KeyCode::Char('y') | KeyCode::Char('Y') => TransferAction::Execute(dest.clone()),
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => TransferAction::Close,
             _ => TransferAction::None,
@@ -225,15 +224,28 @@ pub fn handle_key(dialog: &mut TransferDialog, key: KeyEvent) -> TransferAction 
     }
 }
 
-/// Validate a chosen destination and return the confirmation stage to move to,
-/// or the error to display while keeping the current stage.
-pub fn confirmation_stage(dialog: &TransferDialog, dest: PathBuf) -> Result<Stage, TransferError> {
+/// What a validated destination leads to.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Resolution {
+    /// Nothing would be lost - transfer immediately.
+    Transfer(PathBuf),
+    /// A file of the same name is already there - ask before replacing it.
+    ConfirmOverwrite(PathBuf),
+}
+
+/// Validate a chosen destination, or return the error to display while keeping the
+/// current stage. Only an overwrite needs confirming; a clear destination transfers
+/// as soon as it is chosen.
+pub fn resolve_destination(
+    dialog: &TransferDialog,
+    dest: PathBuf,
+) -> Result<Resolution, TransferError> {
     validate_destination(&dest, &dialog.source)?;
 
     if dialog.target_path(&dest).exists() {
-        Ok(Stage::ConfirmOverwrite { dest })
+        Ok(Resolution::ConfirmOverwrite(dest))
     } else {
-        Ok(Stage::Confirm { dest })
+        Ok(Resolution::Transfer(dest))
     }
 }
 
@@ -775,30 +787,7 @@ mod tests {
     }
 
     #[test]
-    fn test_handle_key_confirm_yes_executes() {
-        let temp = TempDir::new().unwrap();
-        let dest = PathBuf::from("/tmp/dest");
-        let mut dialog = dialog_with_stage(temp.path(), Stage::Confirm { dest: dest.clone() });
-
-        assert_eq!(
-            handle_key(&mut dialog, key(KeyCode::Char('y'))),
-            TransferAction::Execute(dest)
-        );
-    }
-
-    #[test]
-    fn test_handle_key_confirm_no_or_esc_closes() {
-        let temp = TempDir::new().unwrap();
-        let dest = PathBuf::from("/tmp/dest");
-
-        for code in [KeyCode::Char('n'), KeyCode::Char('N'), KeyCode::Esc] {
-            let mut dialog = dialog_with_stage(temp.path(), Stage::Confirm { dest: dest.clone() });
-            assert_eq!(handle_key(&mut dialog, key(code)), TransferAction::Close);
-        }
-    }
-
-    #[test]
-    fn test_handle_key_overwrite_confirm_executes() {
+    fn test_handle_key_overwrite_yes_executes() {
         let temp = TempDir::new().unwrap();
         let dest = PathBuf::from("/tmp/dest");
         let mut dialog =
@@ -811,22 +800,32 @@ mod tests {
     }
 
     #[test]
-    fn test_confirmation_stage_without_existing_target() {
+    fn test_handle_key_overwrite_no_or_esc_closes() {
+        let temp = TempDir::new().unwrap();
+        let dest = PathBuf::from("/tmp/dest");
+
+        for code in [KeyCode::Char('n'), KeyCode::Char('N'), KeyCode::Esc] {
+            let mut dialog =
+                dialog_with_stage(temp.path(), Stage::ConfirmOverwrite { dest: dest.clone() });
+            assert_eq!(handle_key(&mut dialog, key(code)), TransferAction::Close);
+        }
+    }
+
+    #[test]
+    fn test_clear_destination_transfers_without_confirmation() {
         let source_dir = TempDir::new().unwrap();
         let dest_dir = TempDir::new().unwrap();
         write_file(source_dir.path(), "a.txt", "hello");
         let dialog = dialog_with_stage(source_dir.path(), Stage::ChooseDestination);
 
         assert_eq!(
-            confirmation_stage(&dialog, dest_dir.path().to_path_buf()),
-            Ok(Stage::Confirm {
-                dest: dest_dir.path().to_path_buf()
-            })
+            resolve_destination(&dialog, dest_dir.path().to_path_buf()),
+            Ok(Resolution::Transfer(dest_dir.path().to_path_buf()))
         );
     }
 
     #[test]
-    fn test_confirmation_stage_detects_existing_target() {
+    fn test_existing_target_asks_before_overwriting() {
         let source_dir = TempDir::new().unwrap();
         let dest_dir = TempDir::new().unwrap();
         write_file(source_dir.path(), "a.txt", "hello");
@@ -834,25 +833,23 @@ mod tests {
         let dialog = dialog_with_stage(source_dir.path(), Stage::ChooseDestination);
 
         assert_eq!(
-            confirmation_stage(&dialog, dest_dir.path().to_path_buf()),
-            Ok(Stage::ConfirmOverwrite {
-                dest: dest_dir.path().to_path_buf()
-            })
+            resolve_destination(&dialog, dest_dir.path().to_path_buf()),
+            Ok(Resolution::ConfirmOverwrite(dest_dir.path().to_path_buf()))
         );
     }
 
     #[test]
-    fn test_confirmation_stage_reports_validation_error() {
+    fn test_resolve_destination_reports_validation_error() {
         let source_dir = TempDir::new().unwrap();
         write_file(source_dir.path(), "a.txt", "hello");
         let dialog = dialog_with_stage(source_dir.path(), Stage::ChooseDestination);
 
         assert_eq!(
-            confirmation_stage(&dialog, source_dir.path().join("missing")),
+            resolve_destination(&dialog, source_dir.path().join("missing")),
             Err(TransferError::NotFound)
         );
         assert_eq!(
-            confirmation_stage(&dialog, source_dir.path().to_path_buf()),
+            resolve_destination(&dialog, source_dir.path().to_path_buf()),
             Err(TransferError::SameDirectory)
         );
     }

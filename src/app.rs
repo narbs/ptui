@@ -4,7 +4,7 @@ use crate::file_browser::FileBrowser;
 use crate::localization::Localization;
 use crate::preview::{PreviewContent, PreviewManager};
 use crate::state::PTuiState;
-use crate::transfer::{self, TransferAction, TransferDialog, TransferMode};
+use crate::transfer::{self, Resolution, Stage, TransferAction, TransferDialog, TransferMode};
 use crate::transitions::TransitionManager;
 use crate::ui::{UILayout, UIRenderer};
 use ansi_to_tui::IntoText;
@@ -639,20 +639,27 @@ impl ChafaTui {
         self.needs_redraw = true;
     }
 
-    /// Validate a chosen destination and move to the matching confirmation step.
-    /// Validation errors keep the dialog open so the path can be corrected.
+    /// Act on a chosen destination: transfer straight away unless it would replace an
+    /// existing file. Validation errors keep the dialog open so the path can be corrected.
     fn propose_transfer_destination(&mut self, dest: PathBuf) {
-        let Some(dialog) = self.transfer_dialog.as_mut() else {
+        let Some(dialog) = self.transfer_dialog.as_ref() else {
             return;
         };
 
-        match transfer::confirmation_stage(dialog, dest) {
-            Ok(stage) => {
-                dialog.error = None;
-                dialog.stage = stage;
+        let resolution = transfer::resolve_destination(dialog, dest);
+
+        match resolution {
+            Ok(Resolution::Transfer(dest)) => self.execute_transfer(dest),
+            Ok(Resolution::ConfirmOverwrite(dest)) => {
+                if let Some(dialog) = self.transfer_dialog.as_mut() {
+                    dialog.error = None;
+                    dialog.stage = Stage::ConfirmOverwrite { dest };
+                }
             }
             Err(error) => {
-                dialog.error = Some(error.message_key());
+                if let Some(dialog) = self.transfer_dialog.as_mut() {
+                    dialog.error = Some(error.message_key());
+                }
             }
         }
     }

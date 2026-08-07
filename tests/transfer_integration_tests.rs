@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ptui::state::PTuiState;
 use ptui::transfer::{
-    self, Stage, TransferAction, TransferDialog, TransferError, TransferMode, handle_key,
+    self, Resolution, Stage, TransferAction, TransferDialog, TransferError, TransferMode, handle_key,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -27,17 +27,20 @@ fn dialog_for(mode: TransferMode, source: &Path, last_used: Option<&Path>) -> Tr
     )
 }
 
-/// Mirrors the app's dialog loop: keys drive the dialog, proposals are validated into a
-/// confirmation stage, and a confirmed destination performs the transfer.
+/// Mirrors the app's dialog loop: keys drive the dialog, a clear destination transfers
+/// immediately, and one that would replace a file waits for the overwrite confirmation.
 fn drive(dialog: &mut TransferDialog, keys: &[KeyEvent]) -> Option<PathBuf> {
     for k in keys {
         match handle_key(dialog, *k) {
             TransferAction::None => {}
             TransferAction::Close => return None,
-            TransferAction::Propose(dest) => match transfer::confirmation_stage(dialog, dest) {
-                Ok(stage) => {
+            TransferAction::Propose(dest) => match transfer::resolve_destination(dialog, dest) {
+                Ok(Resolution::Transfer(dest)) => {
+                    return Some(transfer::perform(dialog.mode, &dialog.source, &dest).unwrap());
+                }
+                Ok(Resolution::ConfirmOverwrite(dest)) => {
                     dialog.error = None;
-                    dialog.stage = stage;
+                    dialog.stage = Stage::ConfirmOverwrite { dest };
                 }
                 Err(error) => dialog.error = Some(error.message_key()),
             },
@@ -64,13 +67,13 @@ fn test_copy_to_typed_path_end_to_end() {
 
     let mut dialog = dialog_for(TransferMode::Copy, &source, None);
 
-    // Choose the final numbered entry (free-text path), type the destination, confirm.
+    // Choose the final numbered entry (free-text path) and type the destination. Nothing
+    // is there to replace, so Enter completes the copy without a further confirmation.
     let mut keys = vec![key(KeyCode::Char(
         char::from_digit(dialog.custom_path_number() as u32, 10).unwrap(),
     ))];
     keys.extend(type_path(dest_dir.path()));
     keys.push(key(KeyCode::Enter));
-    keys.push(key(KeyCode::Char('y')));
 
     let target = drive(&mut dialog, &keys).expect("copy should complete");
 
@@ -88,11 +91,7 @@ fn test_move_to_bookmark_end_to_end() {
     // The remembered destination is always the first entry in the list.
     let mut dialog = dialog_for(TransferMode::Move, &source, Some(dest_dir.path()));
 
-    let target = drive(
-        &mut dialog,
-        &[key(KeyCode::Char('1')), key(KeyCode::Char('y'))],
-    )
-    .expect("move should complete");
+    let target = drive(&mut dialog, &[key(KeyCode::Char('1'))]).expect("move should complete");
 
     assert_eq!(target, dest_dir.path().join("sunset.jpg"));
     assert!(!source.exists(), "move must remove the source");

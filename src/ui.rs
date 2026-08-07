@@ -647,9 +647,9 @@ impl UIRenderer {
 
         let args = fluent_args!["file" => dialog.file_name.as_str()];
         let mut lines: Vec<Line> = Vec::new();
-        let instructions_key;
 
-        match &dialog.stage {
+        // Each arm fills in the body and yields the key instructions to show beneath it.
+        let instructions_key = match &dialog.stage {
             Stage::ChooseDestination => {
                 lines.push(Line::from(
                     localization.get_with_args(dialog.mode.prompt_key(), Some(&args)),
@@ -674,7 +674,7 @@ impl UIRenderer {
                     dialog.custom_path_number(),
                     localization.get("transfer_enter_path")
                 )));
-                instructions_key = "transfer_choose_instructions";
+                "transfer_choose_instructions"
             }
             Stage::EnterPath { input } => {
                 lines.push(Line::from(
@@ -689,19 +689,7 @@ impl UIRenderer {
                     label,
                     shorten_path_text(input, available)
                 )));
-                instructions_key = "transfer_input_instructions";
-            }
-            Stage::Confirm { dest } => {
-                lines.push(Line::from(
-                    localization.get_with_args(dialog.mode.prompt_key(), Some(&args)),
-                ));
-                lines.push(Line::from(""));
-                lines.push(Line::from(Self::destination_line(
-                    dest,
-                    text_width,
-                    localization,
-                )));
-                instructions_key = "transfer_confirm_instructions";
+                "transfer_input_instructions"
             }
             Stage::ConfirmOverwrite { dest } => {
                 lines.push(Line::from(
@@ -713,9 +701,9 @@ impl UIRenderer {
                     text_width,
                     localization,
                 )));
-                instructions_key = "transfer_confirm_instructions";
+                "transfer_confirm_instructions"
             }
-        }
+        };
 
         // Errors sit with the content they refer to, above the key instructions.
         if let Some(error_key) = dialog.error {
@@ -1073,19 +1061,6 @@ mod tests {
     }
 
     #[test]
-    fn test_render_transfer_dialog_confirm_shows_destination() {
-        use crate::transfer::Stage;
-        use std::path::PathBuf;
-
-        let dialog = transfer_test_dialog(Stage::Confirm {
-            dest: PathBuf::from("/tmp/keepers"),
-        });
-        let text = buffer_text(&render_transfer(&dialog));
-
-        assert!(text.contains("/tmp/keepers"));
-    }
-
-    #[test]
     fn test_render_transfer_dialog_overwrite_shows_prompt() {
         use crate::transfer::Stage;
         use std::path::PathBuf;
@@ -1103,6 +1078,7 @@ mod tests {
             .unwrap()
             .to_string();
         assert!(text.contains(&overwrite_word));
+        assert!(text.contains("/tmp/keepers"), "the destination stays visible");
     }
 
     #[test]

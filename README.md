@@ -97,8 +97,9 @@ The final number in the list switches to free-text path entry, where `~` is expa
 relative paths are resolved against the folder you are browsing. Ctrl+U clears the line
 and Esc goes back to the list.
 
-Either way the transfer is confirmed with `y` before anything is written, and you are
-asked again if a file of the same name already exists at the destination.
+The file is copied or moved as soon as the folder is chosen. The one exception is when a
+file of the same name is already there - then you are asked to confirm the overwrite with
+`y` first.
 
 The last destination you used is remembered between sessions in
 `~/.local/share/ptui/state.json` (on a Mac, under `$HOME/Library/Application Support`),
