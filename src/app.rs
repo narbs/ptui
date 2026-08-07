@@ -3,12 +3,15 @@ use crate::converter;
 use crate::file_browser::FileBrowser;
 use crate::localization::Localization;
 use crate::preview::{PreviewContent, PreviewManager};
+use crate::state::PTuiState;
+use crate::transfer::{self, TransferAction, TransferDialog, TransferMode};
 use crate::transitions::TransitionManager;
 use crate::ui::{UILayout, UIRenderer};
 use ansi_to_tui::IntoText;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::text::Text;
 use std::error::Error;
+use std::path::PathBuf;
 use std::process::Command;
 use std::time::{Duration, Instant};
 
@@ -56,6 +59,10 @@ pub struct ChafaTui {
     // Delete confirmation dialog state
     show_delete_confirmation: bool,
     delete_target_file: Option<String>,
+    // Copy/move destination dialog state
+    transfer_dialog: Option<TransferDialog>,
+    // Persisted state (last copy/move destination)
+    app_state: PTuiState,
     // Dirty flag for render optimization
     needs_redraw: bool,
 }
@@ -106,6 +113,9 @@ impl ChafaTui {
             // Delete confirmation dialog state
             show_delete_confirmation: false,
             delete_target_file: None,
+            // Copy/move destination dialog state
+            transfer_dialog: None,
+            app_state: PTuiState::load(),
             // Dirty flag for render optimization
             needs_redraw: true,
         };
@@ -155,6 +165,12 @@ impl ChafaTui {
         // Handle delete confirmation dialog first if it's showing
         if self.show_delete_confirmation {
             self.handle_delete_confirmation(key)?;
+            return Ok(());
+        }
+
+        // Handle the copy/move destination dialog if it's showing
+        if self.transfer_dialog.is_some() {
+            self.handle_transfer_key(key);
             return Ok(());
         }
 
@@ -278,6 +294,16 @@ impl ChafaTui {
                 self.show_help_toggle = false;
                 // Show delete confirmation dialog
                 self.show_delete_dialog();
+            }
+            KeyCode::Char('c') => {
+                self.show_help_on_startup = false;
+                self.show_help_toggle = false;
+                self.show_transfer_dialog(TransferMode::Copy);
+            }
+            KeyCode::Char('m') => {
+                self.show_help_on_startup = false;
+                self.show_help_toggle = false;
+                self.show_transfer_dialog(TransferMode::Move);
             }
             KeyCode::Char('o') => {
                 self.show_help_on_startup = false;
@@ -556,6 +582,128 @@ impl ChafaTui {
             }
         }
         Ok(())
+    }
+
+    /// True while any modal dialog is open. Graphical previews must not be drawn then,
+    /// because the Kitty/iTerm2 image layer sits above the text cells.
+    fn dialog_active(&self) -> bool {
+        self.show_delete_confirmation || self.transfer_dialog.is_some()
+    }
+
+    fn append_message(&mut self, message: String) {
+        let current_debug = self.preview_manager.get_debug_info();
+        self.preview_manager.debug_info = format!("{} | {}", current_debug, message);
+    }
+
+    fn show_transfer_dialog(&mut self, mode: TransferMode) {
+        let Some(file) = self.file_browser.get_selected_file() else {
+            let message = self.localization.get("no_file_selected");
+            self.append_message(message);
+            return;
+        };
+
+        if file.is_directory {
+            let message = self.localization.get("cannot_transfer_directory");
+            self.append_message(message);
+            return;
+        }
+
+        let source = PathBuf::from(&file.path);
+        let file_name = file.name.clone();
+        let current_dir = PathBuf::from(&self.file_browser.current_dir);
+        let last_used = self.app_state.get_last_transfer_destination();
+
+        self.transfer_dialog = Some(TransferDialog::new(
+            mode,
+            source,
+            file_name,
+            current_dir,
+            last_used.as_deref(),
+        ));
+        self.needs_redraw = true;
+    }
+
+    fn handle_transfer_key(&mut self, key: KeyEvent) {
+        let action = match self.transfer_dialog.as_mut() {
+            Some(dialog) => transfer::handle_key(dialog, key),
+            None => return,
+        };
+
+        match action {
+            TransferAction::None => {}
+            TransferAction::Close => self.transfer_dialog = None,
+            TransferAction::Propose(dest) => self.propose_transfer_destination(dest),
+            TransferAction::Execute(dest) => self.execute_transfer(dest),
+        }
+
+        self.needs_redraw = true;
+    }
+
+    /// Validate a chosen destination and move to the matching confirmation step.
+    /// Validation errors keep the dialog open so the path can be corrected.
+    fn propose_transfer_destination(&mut self, dest: PathBuf) {
+        let Some(dialog) = self.transfer_dialog.as_mut() else {
+            return;
+        };
+
+        match transfer::confirmation_stage(dialog, dest) {
+            Ok(stage) => {
+                dialog.error = None;
+                dialog.stage = stage;
+            }
+            Err(error) => {
+                dialog.error = Some(error.message_key());
+            }
+        }
+    }
+
+    fn execute_transfer(&mut self, dest: PathBuf) {
+        let Some(dialog) = self.transfer_dialog.take() else {
+            return;
+        };
+
+        match transfer::perform(dialog.mode, &dialog.source, &dest) {
+            Ok(target) => {
+                self.app_state.set_last_transfer_destination(&dest);
+                self.app_state.save();
+
+                let message = format!(
+                    "{}: {} -> {}",
+                    self.localization.get(dialog.mode.success_key()),
+                    dialog.file_name,
+                    target.display()
+                );
+                self.append_message(message);
+
+                // A move removes the file from the current listing, so the cached
+                // preview and the selection index both need to be brought back in line.
+                if dialog.mode == TransferMode::Move {
+                    self.preview_manager.clear_cache();
+                }
+
+                if let Err(e) = self.file_browser.refresh_files() {
+                    self.append_message(format!("WARNING: Failed to refresh file list: {}", e));
+                }
+                self.clamp_selection();
+                self.update_preview();
+            }
+            Err(e) => {
+                let message = format!("{}: {}", self.localization.get("transfer_failed"), e);
+                self.append_message(message);
+            }
+        }
+    }
+
+    /// Keep the selection inside the file list after entries disappear.
+    fn clamp_selection(&mut self) {
+        let file_count = self.file_browser.files.len();
+        if file_count == 0 {
+            self.file_browser.selected_index = 0;
+            self.file_browser.scroll_offset = 0;
+        } else if self.file_browser.selected_index >= file_count {
+            self.file_browser.selected_index = file_count - 1;
+            self.file_browser.center_on_selection();
+        }
     }
 
     fn open_in_system_browser(&mut self) {
@@ -935,7 +1083,7 @@ impl ChafaTui {
             UIRenderer::render_file_browser(f, file_area, &mut self.file_browser, true);
 
             // Don't render graphical preview when dialog is showing (graphics layer sits above text)
-            let preview_to_render = if self.show_delete_confirmation {
+            let preview_to_render = if self.dialog_active() {
                 None
             } else {
                 self.preview_content.as_ref()
@@ -963,6 +1111,11 @@ impl ChafaTui {
             && let Some(ref file_name) = self.delete_target_file
         {
             UIRenderer::render_delete_confirmation_dialog(f, size, file_name, &self.localization);
+        }
+
+        // Render copy/move destination dialog overlay if needed
+        if let Some(ref dialog) = self.transfer_dialog {
+            UIRenderer::render_transfer_dialog(f, size, dialog, &self.localization);
         }
     }
 
@@ -1030,7 +1183,7 @@ impl ChafaTui {
 
             // Clear graphics if not graphical content, or if delete dialog is showing
             // (dialog needs to appear above the graphics layer)
-            if !is_current_graphical || self.show_delete_confirmation {
+            if !is_current_graphical || self.dialog_active() {
                 use std::io::Write;
                 // Send Kitty protocol command to delete all images
                 let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
@@ -1045,8 +1198,8 @@ impl ChafaTui {
     pub fn render_kitty_post_draw(&mut self) {
         #[cfg(not(test))]
         {
-            // Don't render graphics when delete confirmation dialog is showing
-            if self.show_delete_confirmation {
+            // Don't render graphics when a modal dialog is showing
+            if self.dialog_active() {
                 return;
             }
 

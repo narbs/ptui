@@ -5,6 +5,8 @@ mod fast_image_loader;
 mod file_browser;
 mod localization;
 mod preview;
+mod state;
+mod transfer;
 mod transitions;
 mod ui;
 

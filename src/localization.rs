@@ -70,7 +70,7 @@ impl Localization {
 
     pub fn get_help_text(&self) -> String {
         format!(
-            "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             self.get("select_image_to_preview"),
             self.get("keys_navigation"),
             self.get("keys_page_navigation"),
@@ -83,6 +83,8 @@ impl Localization {
             self.get("keys_refresh_image"),
             self.get("keys_save_ascii"),
             self.get("keys_delete_file"),
+            self.get("keys_copy_file"),
+            self.get("keys_move_file"),
             self.get("keys_open_in_browser"),
             self.get("keys_slideshow"),
             self.get("keys_text_scroll"),
@@ -197,6 +199,8 @@ mod tests {
             "keys_refresh_image",
             "keys_save_ascii",
             "keys_delete_file",
+            "keys_copy_file",
+            "keys_move_file",
             "keys_open_in_browser",
             "keys_slideshow",
             "keys_help_toggle",
@@ -208,6 +212,90 @@ mod tests {
             assert!(!message.is_empty(), "Key {} should have a message", key);
             assert_ne!(message, *key, "Key {} should be translated", key);
         }
+    }
+
+    #[rstest::rstest]
+    #[case("en")]
+    #[case("de")]
+    #[case("es")]
+    #[case("fr")]
+    #[case("ja")]
+    #[case("zh")]
+    fn test_transfer_keys_translated_in_all_locales(#[case] locale: &str) {
+        let localization = Localization::new(locale).unwrap();
+
+        let transfer_keys = [
+            "keys_copy_file",
+            "keys_move_file",
+            "copy_dialog_title",
+            "move_dialog_title",
+            "transfer_bookmark_last_used",
+            "transfer_bookmark_home",
+            "transfer_bookmark_desktop",
+            "transfer_bookmark_downloads",
+            "transfer_bookmark_documents",
+            "transfer_bookmark_pictures",
+            "transfer_bookmark_projects",
+            "transfer_enter_path",
+            "transfer_path_label",
+            "transfer_destination_label",
+            "transfer_choose_instructions",
+            "transfer_input_instructions",
+            "transfer_confirm_instructions",
+            "transfer_error_not_found",
+            "transfer_error_not_a_directory",
+            "transfer_error_same_directory",
+            "transfer_copied",
+            "transfer_moved",
+            "transfer_failed",
+            "cannot_transfer_directory",
+        ];
+
+        for key in &transfer_keys {
+            let message = localization.get(key);
+            assert_ne!(
+                message, *key,
+                "Key {} should be translated for locale {}",
+                key, locale
+            );
+        }
+    }
+
+    #[rstest::rstest]
+    #[case("en")]
+    #[case("de")]
+    #[case("es")]
+    #[case("fr")]
+    #[case("ja")]
+    #[case("zh")]
+    fn test_transfer_prompts_interpolate_file_name(#[case] locale: &str) {
+        use fluent::fluent_args;
+        let localization = Localization::new(locale).unwrap();
+        let args = fluent_args!["file" => "sunset.jpg"];
+
+        for key in [
+            "copy_file_prompt",
+            "move_file_prompt",
+            "transfer_overwrite_prompt",
+        ] {
+            let message = localization.get_with_args(key, Some(&args));
+            assert!(
+                message.contains("sunset.jpg"),
+                "Key {} should interpolate the file name for locale {}, got: {}",
+                key,
+                locale,
+                message
+            );
+        }
+    }
+
+    #[test]
+    fn test_help_text_includes_copy_and_move() {
+        let localization = Localization::new("en").unwrap();
+        let help_text = localization.get_help_text();
+
+        assert!(help_text.contains(&localization.get("keys_copy_file")));
+        assert!(help_text.contains(&localization.get("keys_move_file")));
     }
 
     #[test]

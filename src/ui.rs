@@ -1,14 +1,16 @@
 use crate::file_browser::FileBrowser;
 use crate::localization::Localization;
 use crate::preview::PreviewContent;
+use crate::transfer::{Stage, TransferDialog};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    text::Text,
+    text::{Line, Span, Text},
     widgets::{Block, Borders, Clear, List, ListItem, Paragraph, Wrap},
 };
 use ratatui_image::{Resize, StatefulImage};
+use std::path::Path;
 
 const WIDE_SCREEN_WIDTH_PERCENT: u16 = 10;
 const NARROW_SCREEN_WIDTH_PERCENT: u16 = 15;
@@ -122,6 +124,37 @@ fn centered_rect(width: u16, height: u16, r: Rect) -> Rect {
             Constraint::Min((r.width.saturating_sub(width)) / 2),
         ])
         .split(popup_layout[1])[1]
+}
+
+/// Width of the copy/move dialog, clamped to the terminal in `render_transfer_dialog`.
+const TRANSFER_DIALOG_WIDTH: u16 = 64;
+/// Column width reserved for bookmark labels ("Downloads", "Documents", ...).
+const TRANSFER_LABEL_WIDTH: usize = 14;
+
+/// Render a path for display, abbreviating the home directory as `~`.
+pub fn display_path(path: &Path) -> String {
+    if let Some(home) = dirs::home_dir() {
+        if path == home {
+            return "~".to_string();
+        }
+        if let Ok(rest) = path.strip_prefix(&home) {
+            return format!("~/{}", rest.to_string_lossy());
+        }
+    }
+    path.to_string_lossy().into_owned()
+}
+
+/// Truncate from the left, keeping the most specific part of a path visible.
+pub fn shorten_path_text(text: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = text.chars().collect();
+    if chars.len() <= max_chars {
+        return text.to_string();
+    }
+    if max_chars <= 3 {
+        return chars[chars.len() - max_chars..].iter().collect();
+    }
+    let tail: String = chars[chars.len() - (max_chars - 3)..].iter().collect();
+    format!("...{}", tail)
 }
 
 pub struct UIRenderer;
@@ -598,6 +631,133 @@ impl UIRenderer {
 
         f.render_widget(dialog_paragraph, popup_area);
     }
+
+    /// Render the copy/move destination dialog.
+    pub fn render_transfer_dialog(
+        f: &mut Frame,
+        area: Rect,
+        dialog: &TransferDialog,
+        localization: &Localization,
+    ) {
+        use fluent::fluent_args;
+
+        let dialog_width = TRANSFER_DIALOG_WIDTH.min(area.width.saturating_sub(4));
+        // Text width inside the borders, with a column of padding on each side.
+        let text_width = dialog_width.saturating_sub(4) as usize;
+
+        let args = fluent_args!["file" => dialog.file_name.as_str()];
+        let mut lines: Vec<Line> = Vec::new();
+        let instructions_key;
+
+        match &dialog.stage {
+            Stage::ChooseDestination => {
+                lines.push(Line::from(
+                    localization.get_with_args(dialog.mode.prompt_key(), Some(&args)),
+                ));
+                lines.push(Line::from(""));
+
+                for (index, bookmark) in dialog.bookmarks.iter().enumerate() {
+                    let label = localization.get(bookmark.label_key);
+                    let path = display_path(&bookmark.path);
+                    let path_width = text_width.saturating_sub(TRANSFER_LABEL_WIDTH + 4);
+                    lines.push(Line::from(format!(
+                        "{:>2}  {:<width$}{}",
+                        index + 1,
+                        label,
+                        shorten_path_text(&path, path_width),
+                        width = TRANSFER_LABEL_WIDTH
+                    )));
+                }
+
+                lines.push(Line::from(format!(
+                    "{:>2}  {}",
+                    dialog.custom_path_number(),
+                    localization.get("transfer_enter_path")
+                )));
+                instructions_key = "transfer_choose_instructions";
+            }
+            Stage::EnterPath { input } => {
+                lines.push(Line::from(
+                    localization.get_with_args(dialog.mode.prompt_key(), Some(&args)),
+                ));
+                lines.push(Line::from(""));
+
+                let label = localization.get("transfer_path_label");
+                let available = text_width.saturating_sub(label.chars().count() + 2);
+                lines.push(Line::from(format!(
+                    "{} {}█",
+                    label,
+                    shorten_path_text(input, available)
+                )));
+                instructions_key = "transfer_input_instructions";
+            }
+            Stage::Confirm { dest } => {
+                lines.push(Line::from(
+                    localization.get_with_args(dialog.mode.prompt_key(), Some(&args)),
+                ));
+                lines.push(Line::from(""));
+                lines.push(Line::from(Self::destination_line(
+                    dest,
+                    text_width,
+                    localization,
+                )));
+                instructions_key = "transfer_confirm_instructions";
+            }
+            Stage::ConfirmOverwrite { dest } => {
+                lines.push(Line::from(
+                    localization.get_with_args("transfer_overwrite_prompt", Some(&args)),
+                ));
+                lines.push(Line::from(""));
+                lines.push(Line::from(Self::destination_line(
+                    dest,
+                    text_width,
+                    localization,
+                )));
+                instructions_key = "transfer_confirm_instructions";
+            }
+        }
+
+        // Errors sit with the content they refer to, above the key instructions.
+        if let Some(error_key) = dialog.error {
+            lines.push(Line::from(Span::styled(
+                localization.get(error_key),
+                Style::default().fg(Color::Red).add_modifier(Modifier::BOLD),
+            )));
+        }
+
+        lines.push(Line::from(""));
+        lines.push(Line::from(localization.get(instructions_key)));
+
+        // Two rows of border plus the content itself.
+        let dialog_height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
+        let popup_area = centered_rect(dialog_width, dialog_height, area);
+
+        f.render_widget(Clear, popup_area);
+
+        let title = format!("📋 {}", localization.get(dialog.mode.title_key()));
+        let dialog_block = Block::default().title(title).borders(Borders::ALL).style(
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD),
+        );
+
+        let dialog_paragraph = Paragraph::new(Text::from(lines))
+            .block(dialog_block)
+            .alignment(Alignment::Left)
+            .style(Style::default().fg(Color::White));
+
+        f.render_widget(dialog_paragraph, popup_area);
+    }
+
+    fn destination_line(dest: &Path, text_width: usize, localization: &Localization) -> String {
+        let label = localization.get("transfer_destination_label");
+        let available = text_width.saturating_sub(label.chars().count() + 1);
+        format!(
+            "{} {}",
+            label,
+            shorten_path_text(&display_path(dest), available)
+        )
+    }
 }
 
 #[cfg(test)]
@@ -846,6 +1006,149 @@ mod tests {
         assert!(!content.contains("{app_subtitle}"));
         assert!(content.contains(env!("CARGO_PKG_VERSION")));
         assert!(!content.contains("{version}"));
+    }
+
+    fn transfer_test_dialog(stage: crate::transfer::Stage) -> TransferDialog {
+        use crate::transfer::TransferMode;
+        use std::path::PathBuf;
+
+        let mut dialog = TransferDialog::new(
+            TransferMode::Copy,
+            PathBuf::from("/src/sunset.jpg"),
+            "sunset.jpg".to_string(),
+            PathBuf::from("/src"),
+            None,
+        );
+        dialog.stage = stage;
+        dialog
+    }
+
+    fn render_transfer(dialog: &TransferDialog) -> ratatui::buffer::Buffer {
+        let localization = crate::localization::Localization::new("en").unwrap();
+        let backend = ratatui::backend::TestBackend::new(90, 30);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|f| {
+                UIRenderer::render_transfer_dialog(f, f.area(), dialog, &localization);
+            })
+            .unwrap();
+
+        terminal.backend().buffer().clone()
+    }
+
+    fn buffer_text(buffer: &ratatui::buffer::Buffer) -> String {
+        let area = buffer.area();
+        (0..area.height)
+            .map(|y| {
+                (0..area.width)
+                    .map(|x| buffer[(x, y)].symbol().to_string())
+                    .collect::<String>()
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn test_render_transfer_dialog_choose_destination_lists_numbers() {
+        use crate::transfer::Stage;
+        let dialog = transfer_test_dialog(Stage::ChooseDestination);
+        let text = buffer_text(&render_transfer(&dialog));
+
+        assert!(text.contains("sunset.jpg"));
+        // The custom-path entry is always the final number in the list.
+        assert!(text.contains(&format!(" {}  ", dialog.custom_path_number())));
+    }
+
+    #[test]
+    fn test_render_transfer_dialog_enter_path_shows_input() {
+        use crate::transfer::Stage;
+        let dialog = transfer_test_dialog(Stage::EnterPath {
+            input: "/tmp/keepers".to_string(),
+        });
+        let text = buffer_text(&render_transfer(&dialog));
+
+        assert!(text.contains("/tmp/keepers"));
+        assert!(text.contains('█'), "input line should show a cursor");
+    }
+
+    #[test]
+    fn test_render_transfer_dialog_confirm_shows_destination() {
+        use crate::transfer::Stage;
+        use std::path::PathBuf;
+
+        let dialog = transfer_test_dialog(Stage::Confirm {
+            dest: PathBuf::from("/tmp/keepers"),
+        });
+        let text = buffer_text(&render_transfer(&dialog));
+
+        assert!(text.contains("/tmp/keepers"));
+    }
+
+    #[test]
+    fn test_render_transfer_dialog_overwrite_shows_prompt() {
+        use crate::transfer::Stage;
+        use std::path::PathBuf;
+
+        let localization = crate::localization::Localization::new("en").unwrap();
+        let dialog = transfer_test_dialog(Stage::ConfirmOverwrite {
+            dest: PathBuf::from("/tmp/keepers"),
+        });
+        let text = buffer_text(&render_transfer(&dialog));
+
+        let overwrite_word = localization
+            .get("transfer_overwrite_prompt")
+            .split_whitespace()
+            .last()
+            .unwrap()
+            .to_string();
+        assert!(text.contains(&overwrite_word));
+    }
+
+    #[test]
+    fn test_render_transfer_dialog_shows_error() {
+        use crate::transfer::{Stage, TransferError};
+
+        let localization = crate::localization::Localization::new("en").unwrap();
+        let mut dialog = transfer_test_dialog(Stage::EnterPath {
+            input: "/nope".to_string(),
+        });
+        dialog.error = Some(TransferError::NotFound.message_key());
+
+        let text = buffer_text(&render_transfer(&dialog));
+        assert!(text.contains(&localization.get("transfer_error_not_found")));
+    }
+
+    #[test]
+    fn test_render_transfer_dialog_fits_small_terminal() {
+        use crate::transfer::Stage;
+
+        let localization = crate::localization::Localization::new("en").unwrap();
+        let dialog = transfer_test_dialog(Stage::ChooseDestination);
+        let backend = ratatui::backend::TestBackend::new(30, 12);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+
+        terminal
+            .draw(|f| {
+                UIRenderer::render_transfer_dialog(f, f.area(), &dialog, &localization);
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_shorten_path_text_keeps_tail() {
+        assert_eq!(shorten_path_text("/a/b/c", 10), "/a/b/c");
+        assert_eq!(shorten_path_text("/very/long/path/name", 10), "...th/name");
+        assert_eq!(shorten_path_text("/very/long/path", 2).chars().count(), 2);
+    }
+
+    #[test]
+    fn test_display_path_abbreviates_home() {
+        if let Some(home) = dirs::home_dir() {
+            assert_eq!(display_path(&home), "~");
+            assert_eq!(display_path(&home.join("pics")), "~/pics");
+        }
+        assert_eq!(display_path(Path::new("/tmp/x")), "/tmp/x");
     }
 
     #[test]

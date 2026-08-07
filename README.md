@@ -75,6 +75,8 @@ Controls:
     [ / ]             - Resize preview window
     space             - Start Slideshow (Arrows work here too)
     x                 - Delete file
+    c                 - Copy file to a folder
+    m                 - Move file to a folder
     s                 - Save file to ascii
     d, n              - Sort by date (toggle newest/oldest), n: Sort by name
     Home/End          - Home: Go to start, End: Go to end
@@ -83,6 +85,24 @@ Controls:
     TAB               - Cycle between converters
     ?                 - Help
 ```
+
+Copying and moving files
+------------------------
+Press `c` (copy) or `m` (move) with a file selected to choose a destination folder.
+A numbered list of shortcuts appears - the last folder you copied or moved to, followed
+by the standard folders that exist on your system (home, desktop, downloads, documents,
+pictures and a projects folder if you have one). Press the matching number to pick one.
+
+The final number in the list switches to free-text path entry, where `~` is expanded and
+relative paths are resolved against the folder you are browsing. Ctrl+U clears the line
+and Esc goes back to the list.
+
+Either way the transfer is confirmed with `y` before anything is written, and you are
+asked again if a file of the same name already exists at the destination.
+
+The last destination you used is remembered between sessions in
+`~/.local/share/ptui/state.json` (on a Mac, under `$HOME/Library/Application Support`),
+so repeating a copy to the same folder is a couple of key presses.
 
 Configuration
 -------------
