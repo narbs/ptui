@@ -1,4 +1,5 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ptui::file_browser::FileBrowser;
 use ptui::state::PTuiState;
 use ptui::transfer::{
     self, Resolution, Stage, TransferAction, TransferDialog, TransferError, TransferMode, handle_key,
@@ -199,4 +200,63 @@ fn test_last_destination_persists_and_leads_the_next_dialog() {
 
     assert_eq!(dialog.bookmarks[0].label_key, "transfer_bookmark_last_used");
     assert_eq!(dialog.bookmarks[0].path, dest_dir.path());
+}
+
+/// After a transfer the app captures fallback names, re-reads the directory, and reselects
+/// by name. These cover that sequence against a directory that changed underneath it.
+#[test]
+fn test_selection_follows_the_copied_file_when_the_listing_shifts() {
+    let source_dir = TempDir::new().unwrap();
+    let dest_dir = TempDir::new().unwrap();
+    for name in ["b.jpg", "c.jpg", "d.jpg"] {
+        write_file(source_dir.path(), name, "x");
+    }
+
+    let mut browser = FileBrowser::new_with_dir(source_dir.path()).unwrap();
+    browser.update_max_visible_files(10);
+    let selected = browser.files.iter().position(|f| f.name == "c.jpg").unwrap();
+    browser.set_selected_index(selected);
+
+    let fallback = browser.selection_fallback_names();
+    let source = source_dir.path().join("c.jpg");
+    transfer::perform(TransferMode::Copy, &source, dest_dir.path()).unwrap();
+
+    // Something else adds a file ahead of the selection while the dialog was open.
+    write_file(source_dir.path(), "a.jpg", "x");
+    browser.refresh_files().unwrap();
+    assert!(browser.select_first_available(&fallback));
+
+    assert_eq!(
+        browser.get_selected_file().unwrap().name,
+        "c.jpg",
+        "a copy should leave the selection on the file that was copied"
+    );
+}
+
+#[test]
+fn test_selection_follows_the_next_file_after_a_move_when_the_listing_shifts() {
+    let source_dir = TempDir::new().unwrap();
+    let dest_dir = TempDir::new().unwrap();
+    for name in ["b.jpg", "c.jpg", "d.jpg"] {
+        write_file(source_dir.path(), name, "x");
+    }
+
+    let mut browser = FileBrowser::new_with_dir(source_dir.path()).unwrap();
+    browser.update_max_visible_files(10);
+    let selected = browser.files.iter().position(|f| f.name == "c.jpg").unwrap();
+    browser.set_selected_index(selected);
+
+    let fallback = browser.selection_fallback_names();
+    let source = source_dir.path().join("c.jpg");
+    transfer::perform(TransferMode::Move, &source, dest_dir.path()).unwrap();
+
+    write_file(source_dir.path(), "a.jpg", "x");
+    browser.refresh_files().unwrap();
+    assert!(browser.select_first_available(&fallback));
+
+    assert_eq!(
+        browser.get_selected_file().unwrap().name,
+        "d.jpg",
+        "a move should leave the selection on the file that followed it"
+    );
 }

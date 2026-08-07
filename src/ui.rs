@@ -157,6 +157,38 @@ pub fn shorten_path_text(text: &str, max_chars: usize) -> String {
     format!("...{}", tail)
 }
 
+/// Rows a line of text needs once wrapped to `width`, matching how Paragraph breaks on
+/// word boundaries and hard-breaks words too long to fit. Widths are display columns, not
+/// characters, so CJK text is measured correctly. Used to size dialogs to their content so
+/// nothing is clipped in languages whose strings are longer than English.
+pub fn wrapped_rows(text: &str, width: usize) -> usize {
+    if width == 0 {
+        return 1;
+    }
+
+    let mut rows = 1;
+    let mut used = 0;
+
+    for word in text.split_whitespace() {
+        let word_width = Span::from(word).width();
+
+        // Fits on the current row after a space, so keep filling it.
+        if used > 0 {
+            if used + 1 + word_width <= width {
+                used += 1 + word_width;
+                continue;
+            }
+            rows += 1;
+        }
+
+        // A word wider than the line spills over onto further rows.
+        rows += word_width.saturating_sub(1) / width;
+        used = word_width - (word_width.saturating_sub(1) / width) * width;
+    }
+
+    rows
+}
+
 pub struct UIRenderer;
 
 impl UIRenderer {
@@ -601,18 +633,23 @@ impl UIRenderer {
         use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
         // Calculate centered dialog position
-        let dialog_width = 50.min(area.width.saturating_sub(4));
-        let dialog_height = 5.min(area.height.saturating_sub(4));
-
-        let popup_area = centered_rect(dialog_width, dialog_height, area);
-
-        // Clear the area where the dialog will be rendered
-        f.render_widget(Clear, popup_area);
+        let dialog_width = 56.min(area.width.saturating_sub(4));
+        let text_width = dialog_width.saturating_sub(2) as usize;
 
         // Create the dialog message with the file name
         let args = fluent_args!["file" => file_name];
         let prompt = localization.get_with_args("delete_file_prompt", Some(&args));
         let instructions = localization.get("delete_confirmation_instructions");
+
+        // Size to the wrapped content: borders, prompt, a blank line, instructions.
+        let content_rows =
+            wrapped_rows(&prompt, text_width) + 1 + wrapped_rows(&instructions, text_width);
+        let dialog_height = (content_rows as u16 + 2).min(area.height.saturating_sub(2));
+
+        let popup_area = centered_rect(dialog_width, dialog_height, area);
+
+        // Clear the area where the dialog will be rendered
+        f.render_widget(Clear, popup_area);
 
         let confirmation_text = format!("{}\n\n{}", prompt, instructions);
 
@@ -626,6 +663,7 @@ impl UIRenderer {
         // Create the dialog content
         let dialog_paragraph = Paragraph::new(confirmation_text)
             .block(dialog_block)
+            .wrap(ratatui::widgets::Wrap { trim: true })
             .alignment(Alignment::Center)
             .style(Style::default().fg(Color::Yellow));
 
@@ -716,8 +754,12 @@ impl UIRenderer {
         lines.push(Line::from(""));
         lines.push(Line::from(localization.get(instructions_key)));
 
-        // Two rows of border plus the content itself.
-        let dialog_height = (lines.len() as u16 + 2).min(area.height.saturating_sub(2));
+        // Two rows of border plus the content, counting lines that wrap.
+        let content_rows: usize = lines
+            .iter()
+            .map(|line| wrapped_rows(&line.to_string(), text_width))
+            .sum();
+        let dialog_height = (content_rows as u16 + 2).min(area.height.saturating_sub(2));
         let popup_area = centered_rect(dialog_width, dialog_height, area);
 
         f.render_widget(Clear, popup_area);
@@ -731,6 +773,7 @@ impl UIRenderer {
 
         let dialog_paragraph = Paragraph::new(Text::from(lines))
             .block(dialog_block)
+            .wrap(Wrap { trim: false })
             .alignment(Alignment::Left)
             .style(Style::default().fg(Color::White));
 
@@ -1125,6 +1168,86 @@ mod tests {
             assert_eq!(display_path(&home.join("pics")), "~/pics");
         }
         assert_eq!(display_path(Path::new("/tmp/x")), "/tmp/x");
+    }
+
+    #[test]
+    fn test_wrapped_rows_counts_wrapping() {
+        assert_eq!(wrapped_rows("short", 20), 1);
+        assert_eq!(wrapped_rows("one two three four", 10), 2);
+        assert_eq!(wrapped_rows("", 10), 1);
+        assert_eq!(wrapped_rows("anything", 0), 1);
+        // A single word longer than the line spills onto further rows.
+        assert_eq!(wrapped_rows("abcdefghijkl", 4), 3);
+        // CJK glyphs take two columns each.
+        assert_eq!(wrapped_rows("確認", 4), 1);
+        assert_eq!(wrapped_rows("確認", 2), 2);
+    }
+
+    #[rstest::rstest]
+    #[case("en")]
+    #[case("de")]
+    #[case("es")]
+    #[case("fr")]
+    #[case("ja")]
+    #[case("zh")]
+    fn test_dialogs_are_not_clipped_in_any_locale(#[case] locale: &str) {
+        use crate::transfer::Stage;
+        use std::path::PathBuf;
+
+        let localization = crate::localization::Localization::new(locale).unwrap();
+
+        // The instructions are the longest string in either dialog; if its final word
+        // survives rendering, the dialog was tall and wide enough for the whole message.
+        let delete_instructions = localization.get("delete_confirmation_instructions");
+        let transfer_instructions = localization.get("transfer_confirm_instructions");
+
+        let backend = ratatui::backend::TestBackend::new(80, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| {
+                UIRenderer::render_delete_confirmation_dialog(
+                    f,
+                    f.area(),
+                    "sunset.jpg",
+                    &localization,
+                );
+            })
+            .unwrap();
+        let text = buffer_text(&terminal.backend().buffer().clone());
+        assert!(
+            dialog_text(&text).contains(&dialog_text(&delete_instructions)),
+            "delete dialog clipped for {}: missing {:?}",
+            locale,
+            delete_instructions
+        );
+
+        let mut dialog = transfer_test_dialog(Stage::ConfirmOverwrite {
+            dest: PathBuf::from("/home/user/Downloads"),
+        });
+        dialog.mode = crate::transfer::TransferMode::Move;
+
+        let backend = ratatui::backend::TestBackend::new(80, 20);
+        let mut terminal = ratatui::Terminal::new(backend).unwrap();
+        terminal
+            .draw(|f| {
+                UIRenderer::render_transfer_dialog(f, f.area(), &dialog, &localization);
+            })
+            .unwrap();
+        let text = buffer_text(&terminal.backend().buffer().clone());
+        assert!(
+            dialog_text(&text).contains(&dialog_text(&transfer_instructions)),
+            "transfer dialog clipped for {}: missing {:?}",
+            locale,
+            transfer_instructions
+        );
+    }
+
+    /// Strip whitespace and the box-drawing border, so a message that wrapped across
+    /// rows still matches the string it came from.
+    fn dialog_text(text: &str) -> String {
+        text.chars()
+            .filter(|c| !c.is_whitespace() && !"│─┌┐└┘".contains(*c))
+            .collect()
     }
 
     #[test]

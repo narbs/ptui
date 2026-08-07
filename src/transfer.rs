@@ -217,7 +217,9 @@ pub fn handle_key(dialog: &mut TransferDialog, key: KeyEvent) -> TransferAction 
             _ => TransferAction::None,
         },
         Stage::ConfirmOverwrite { dest } => match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => TransferAction::Execute(dest.clone()),
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                TransferAction::Execute(dest.clone())
+            }
             KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => TransferAction::Close,
             _ => TransferAction::None,
         },
@@ -795,6 +797,19 @@ mod tests {
 
         assert_eq!(
             handle_key(&mut dialog, key(KeyCode::Char('Y'))),
+            TransferAction::Execute(dest)
+        );
+    }
+
+    #[test]
+    fn test_handle_key_overwrite_enter_also_confirms() {
+        let temp = TempDir::new().unwrap();
+        let dest = PathBuf::from("/tmp/dest");
+        let mut dialog =
+            dialog_with_stage(temp.path(), Stage::ConfirmOverwrite { dest: dest.clone() });
+
+        assert_eq!(
+            handle_key(&mut dialog, key(KeyCode::Enter)),
             TransferAction::Execute(dest)
         );
     }

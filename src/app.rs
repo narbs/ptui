@@ -480,13 +480,20 @@ impl ChafaTui {
                     self.preview_manager.debug_info =
                         format!("{} | {}", current_debug, success_msg);
 
-                    // Refresh file list to show the new ASCII file
+                    // Refresh file list to show the new ASCII file. The saved file sorts
+                    // into the listing and shifts the indices, so reselect by name to stay
+                    // on the image that was saved.
+                    let fallback_names = self.file_browser.selection_fallback_names();
+
                     if let Err(e) = self.file_browser.refresh_files() {
                         let current_debug = self.preview_manager.get_debug_info();
                         self.preview_manager.debug_info = format!(
                             "{} | WARNING: Failed to refresh file list: {}",
                             current_debug, e
                         );
+                    }
+                    if !self.file_browser.select_first_available(&fallback_names) {
+                        self.clamp_selection();
                     }
                 }
                 Err(error_msg) => {
@@ -526,7 +533,7 @@ impl ChafaTui {
 
     fn handle_delete_confirmation(&mut self, key: KeyEvent) -> Result<(), Box<dyn Error>> {
         match key.code {
-            KeyCode::Char('y') | KeyCode::Char('Y') => {
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
                 // User confirmed deletion
                 if let Some(file_name) = &self.delete_target_file {
                     self.delete_current_file(file_name.clone())?;
@@ -560,13 +567,21 @@ impl ChafaTui {
                     self.preview_manager.debug_info =
                         format!("{} | Deleted: {}", current_debug, file_name);
 
-                    // Refresh file list to remove deleted file
+                    // Refresh file list to remove deleted file. The deleted file is gone
+                    // from the fallback list, so the selection lands on the file that
+                    // followed it, by name rather than by a position the refresh may have
+                    // shifted.
+                    let fallback_names = self.file_browser.selection_fallback_names();
+
                     if let Err(e) = self.file_browser.refresh_files() {
                         let current_debug = self.preview_manager.get_debug_info();
                         self.preview_manager.debug_info = format!(
                             "{} | WARNING: Failed to refresh file list: {}",
                             current_debug, e
                         );
+                    }
+                    if !self.file_browser.select_first_available(&fallback_names) {
+                        self.clamp_selection();
                     }
 
                     // Update preview after refresh
@@ -682,16 +697,25 @@ impl ChafaTui {
                 );
                 self.append_message(message);
 
-                // A move removes the file from the current listing, so the cached
-                // preview and the selection index both need to be brought back in line.
+                // A move removes the file from the current listing, so its cached preview
+                // is no longer reachable.
                 if dialog.mode == TransferMode::Move {
                     self.preview_manager.clear_cache();
                 }
 
+                // Reselect by name rather than by index. The listing is re-read from
+                // disk, so anything added or removed in the background since the dialog
+                // opened would otherwise shift the selection onto an unrelated file.
+                // After a copy the first candidate is the file itself; after a move it
+                // has gone, so the selection lands on the file that followed it.
+                let fallback_names = self.file_browser.selection_fallback_names();
+
                 if let Err(e) = self.file_browser.refresh_files() {
                     self.append_message(format!("WARNING: Failed to refresh file list: {}", e));
                 }
-                self.clamp_selection();
+                if !self.file_browser.select_first_available(&fallback_names) {
+                    self.clamp_selection();
+                }
                 self.update_preview();
             }
             Err(e) => {

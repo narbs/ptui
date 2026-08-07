@@ -6,7 +6,12 @@ Aug 7, 2026
 
 PTUI 2.3.1 released. Copying and moving a file now happens as soon as the destination folder is
 chosen, instead of asking for a further confirmation. Replacing a file of the same name still asks
-first
+first. Confirmation dialogs now accept Enter as well as y. After a copy, move, delete or ascii save
+the file list is reselected by name rather than by position, so files added or removed in the
+background no longer drag the highlight onto an unrelated file: a copy keeps the highlight on the
+file that was copied, a move or delete puts it on the file that followed it, and saving an ascii
+file keeps it on the image it was made from. Confirmation dialogs also size themselves to their
+contents, fixing prompts that were cut off in languages with longer text than English
 
 Aug 6, 2026
 -----------

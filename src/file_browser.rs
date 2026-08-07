@@ -511,6 +511,38 @@ impl FileBrowser {
         }
     }
 
+    /// Names to fall back on when reselecting after the listing may have changed:
+    /// the selected file first, then the ones after it, then the ones before it in
+    /// reverse. Capture this before refreshing, then hand it to
+    /// [`select_first_available`](Self::select_first_available).
+    pub fn selection_fallback_names(&self) -> Vec<String> {
+        if self.files.is_empty() {
+            return Vec::new();
+        }
+
+        let selected = self.selected_index.min(self.files.len() - 1);
+
+        self.files[selected..]
+            .iter()
+            .chain(self.files[..selected].iter().rev())
+            .map(|file| file.name.clone())
+            .collect()
+    }
+
+    /// Select the first of `candidate_names` that is still present. Names are matched
+    /// rather than indices, so a file added or removed in the background does not drag
+    /// the selection onto an unrelated file. Returns false if none of them are left.
+    pub fn select_first_available(&mut self, candidate_names: &[String]) -> bool {
+        for name in candidate_names {
+            if let Some(index) = self.files.iter().position(|file| &file.name == name) {
+                self.selected_index = index;
+                self.center_on_selection();
+                return true;
+            }
+        }
+        false
+    }
+
     pub fn center_on_selection(&mut self) {
         if self.max_visible_files == 0 {
             return;
@@ -1111,5 +1143,109 @@ mod tests {
             assert!(browser.selected_index >= browser.scroll_offset);
             assert!(browser.selected_index < browser.scroll_offset + browser.max_visible_files);
         }
+    }
+
+    /// Build a browser over files a.txt .. e.txt with `selected` chosen by name.
+    fn browser_with_files(temp_fs: &TestFileSystem, names: &[&str], selected: &str) -> FileBrowser {
+        for name in names {
+            temp_fs.create_file(name, "x").unwrap();
+        }
+        let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
+        browser.update_max_visible_files(10);
+        let index = browser
+            .files
+            .iter()
+            .position(|f| f.name == selected)
+            .unwrap();
+        browser.set_selected_index(index);
+        browser
+    }
+
+    #[test]
+    fn test_selection_fallback_names_orders_selected_then_after_then_before() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        let browser = browser_with_files(&temp_fs, &["a.txt", "b.txt", "c.txt", "d.txt"], "c.txt");
+
+        assert_eq!(
+            browser.selection_fallback_names(),
+            vec![
+                "c.txt".to_string(),
+                "d.txt".to_string(),
+                "b.txt".to_string(),
+                "a.txt".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_selection_fallback_names_on_empty_list() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        let browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
+
+        assert!(browser.selection_fallback_names().is_empty());
+    }
+
+    #[test]
+    fn test_select_first_available_picks_the_first_present_name() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        let mut browser = browser_with_files(&temp_fs, &["a.txt", "b.txt", "c.txt"], "a.txt");
+
+        assert!(browser.select_first_available(&[
+            "missing.txt".to_string(),
+            "c.txt".to_string(),
+            "b.txt".to_string(),
+        ]));
+        assert_eq!(browser.get_selected_file().unwrap().name, "c.txt");
+    }
+
+    #[test]
+    fn test_select_first_available_reports_when_nothing_matches() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        let mut browser = browser_with_files(&temp_fs, &["a.txt"], "a.txt");
+
+        assert!(!browser.select_first_available(&["gone.txt".to_string()]));
+    }
+
+    #[test]
+    fn test_selection_survives_files_added_in_the_background() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        let mut browser = browser_with_files(&temp_fs, &["b.txt", "c.txt", "d.txt"], "c.txt");
+        let fallback = browser.selection_fallback_names();
+
+        // Something else drops a file in ahead of the selection; index 1 is now b.txt.
+        temp_fs.create_file("a.txt", "x").unwrap();
+        browser.refresh_files().unwrap();
+        assert!(browser.select_first_available(&fallback));
+
+        assert_eq!(browser.get_selected_file().unwrap().name, "c.txt");
+    }
+
+    #[test]
+    fn test_selection_moves_to_next_file_when_the_selected_one_is_gone() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        let mut browser = browser_with_files(&temp_fs, &["b.txt", "c.txt", "d.txt"], "c.txt");
+        let fallback = browser.selection_fallback_names();
+
+        // The selected file is moved away while another appears ahead of it.
+        std::fs::remove_file(temp_fs.get_path().join("c.txt")).unwrap();
+        temp_fs.create_file("a.txt", "x").unwrap();
+        browser.refresh_files().unwrap();
+        assert!(browser.select_first_available(&fallback));
+
+        assert_eq!(browser.get_selected_file().unwrap().name, "d.txt");
+    }
+
+    #[test]
+    fn test_selection_falls_back_to_the_previous_file_at_the_end_of_the_list() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        let mut browser = browser_with_files(&temp_fs, &["a.txt", "b.txt", "c.txt"], "c.txt");
+        let fallback = browser.selection_fallback_names();
+
+        // Last file moved away, so there is nothing after it to land on.
+        std::fs::remove_file(temp_fs.get_path().join("c.txt")).unwrap();
+        browser.refresh_files().unwrap();
+        assert!(browser.select_first_available(&fallback));
+
+        assert_eq!(browser.get_selected_file().unwrap().name, "b.txt");
     }
 }
