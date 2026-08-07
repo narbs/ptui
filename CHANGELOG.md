@@ -11,7 +11,9 @@ the file list is reselected by name rather than by position, so files added or r
 background no longer drag the highlight onto an unrelated file: a copy keeps the highlight on the
 file that was copied, a move or delete puts it on the file that followed it, and saving an ascii
 file keeps it on the image it was made from. Confirmation dialogs also size themselves to their
-contents, fixing prompts that were cut off in languages with longer text than English
+contents, fixing prompts that were cut off in languages with longer text than English. Pressing n
+again now reverses the name sort between A to Z and Z to A, matching how d toggles the date sort,
+and reports the new order in the messages pane
 
 Aug 6, 2026
 -----------

@@ -21,7 +21,8 @@ const CONTENT_DETECTION_BUFFER_SIZE: usize = 512;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum SortMode {
-    Name,
+    NameAscending,
+    NameDescending,
     DateNewestFirst,
     DateOldestFirst,
 }
@@ -183,7 +184,7 @@ impl FileBrowser {
             selected_index: 0,
             scroll_offset: 0,
             max_visible_files: 20,
-            sort_mode: SortMode::Name,
+            sort_mode: SortMode::NameAscending,
             dir_stack: Vec::new(),
         };
         browser.refresh_files()?;
@@ -239,7 +240,12 @@ impl FileBrowser {
             } else {
                 // Both are directories or both are files
                 match self.sort_mode {
-                    SortMode::Name => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                    SortMode::NameAscending => {
+                        a.name.to_lowercase().cmp(&b.name.to_lowercase())
+                    }
+                    SortMode::NameDescending => {
+                        b.name.to_lowercase().cmp(&a.name.to_lowercase())
+                    }
                     SortMode::DateNewestFirst => b.modified.cmp(&a.modified), // Newest first
                     SortMode::DateOldestFirst => a.modified.cmp(&b.modified), // Oldest first
                 }
@@ -370,21 +376,34 @@ impl FileBrowser {
         }
     }
 
-    pub fn sort_by_name(&mut self) {
-        if self.sort_mode == SortMode::Name {
-            return; // Already sorted by name
-        }
-
+    pub fn sort_by_name(&mut self) -> &'static str {
         // Remember the currently selected file
         let selected_file = self.get_selected_file().map(|f| f.path.clone());
 
-        self.sort_mode = SortMode::Name;
+        // Toggle between name sorting modes and return appropriate message key
+        let message_key = match self.sort_mode {
+            SortMode::NameAscending => {
+                self.sort_mode = SortMode::NameDescending;
+                "name_sort_descending"
+            }
+            SortMode::NameDescending => {
+                self.sort_mode = SortMode::NameAscending;
+                "name_sort_ascending"
+            }
+            _ => {
+                self.sort_mode = SortMode::NameAscending; // Default to A to Z when switching from date
+                "name_sort_ascending"
+            }
+        };
+
         self.sort_files();
 
         // Find the file again and update selection
         if let Some(selected_path) = selected_file {
             self.find_and_select_file(&selected_path);
         }
+
+        message_key
     }
 
     pub fn sort_by_date(&mut self) -> &'static str {
@@ -401,7 +420,7 @@ impl FileBrowser {
                 self.sort_mode = SortMode::DateNewestFirst;
                 "date_sort_newest_first"
             }
-            SortMode::Name => {
+            _ => {
                 self.sort_mode = SortMode::DateNewestFirst; // Default to newest first when switching from name
                 "date_sort_newest_first"
             }
@@ -717,10 +736,10 @@ mod tests {
 
     #[test]
     fn test_sort_mode_equality() {
-        assert_eq!(SortMode::Name, SortMode::Name);
+        assert_eq!(SortMode::NameAscending, SortMode::NameAscending);
         assert_eq!(SortMode::DateNewestFirst, SortMode::DateNewestFirst);
         assert_eq!(SortMode::DateOldestFirst, SortMode::DateOldestFirst);
-        assert_ne!(SortMode::Name, SortMode::DateNewestFirst);
+        assert_ne!(SortMode::NameAscending, SortMode::DateNewestFirst);
         assert_ne!(SortMode::DateNewestFirst, SortMode::DateOldestFirst);
     }
 
@@ -733,7 +752,7 @@ mod tests {
         assert_eq!(browser.selected_index, 0);
         assert_eq!(browser.scroll_offset, 0);
         assert_eq!(browser.max_visible_files, 20);
-        assert_eq!(browser.sort_mode, SortMode::Name);
+        assert_eq!(browser.sort_mode, SortMode::NameAscending);
     }
 
     #[test]
@@ -848,8 +867,15 @@ mod tests {
 
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
 
+        // A fresh browser is already A to Z, so the first press flips it to Z to A.
         browser.sort_by_name();
-        assert_eq!(browser.sort_mode, SortMode::Name);
+        assert_eq!(browser.sort_mode, SortMode::NameDescending);
+
+        let first_file = browser.files.iter().find(|f| !f.is_directory).unwrap();
+        assert_eq!(first_file.name, "zebra.txt");
+
+        browser.sort_by_name();
+        assert_eq!(browser.sort_mode, SortMode::NameAscending);
 
         let first_file = browser.files.iter().find(|f| !f.is_directory).unwrap();
         assert_eq!(first_file.name, "alpha.txt");
@@ -859,6 +885,81 @@ mod tests {
 
         let first_file = browser.files.iter().find(|f| !f.is_directory).unwrap();
         assert_eq!(first_file.name, "alpha.txt");
+    }
+
+    #[test]
+    fn test_file_browser_name_sort_toggles_on_repeat() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        for name in ["alpha.txt", "beta.txt", "zebra.txt"] {
+            temp_fs.create_file(name, "content").unwrap();
+        }
+
+        let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
+        assert_eq!(browser.sort_mode, SortMode::NameAscending);
+        assert_eq!(browser.files.first().unwrap().name, "alpha.txt");
+
+        assert_eq!(browser.sort_by_name(), "name_sort_descending");
+        assert_eq!(browser.sort_mode, SortMode::NameDescending);
+        assert_eq!(browser.files.first().unwrap().name, "zebra.txt");
+
+        assert_eq!(browser.sort_by_name(), "name_sort_ascending");
+        assert_eq!(browser.sort_mode, SortMode::NameAscending);
+        assert_eq!(browser.files.first().unwrap().name, "alpha.txt");
+    }
+
+    #[test]
+    fn test_name_sort_from_date_sort_starts_ascending() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        for name in ["alpha.txt", "zebra.txt"] {
+            temp_fs.create_file(name, "content").unwrap();
+        }
+
+        let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
+        browser.sort_by_date();
+        assert_eq!(browser.sort_mode, SortMode::DateNewestFirst);
+
+        // Coming back from a date sort starts at A to Z rather than toggling.
+        assert_eq!(browser.sort_by_name(), "name_sort_ascending");
+        assert_eq!(browser.sort_mode, SortMode::NameAscending);
+        assert_eq!(browser.files.first().unwrap().name, "alpha.txt");
+    }
+
+    #[test]
+    fn test_name_sort_keeps_directories_first_in_both_directions() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        temp_fs.create_file("alpha.txt", "content").unwrap();
+        temp_fs.create_file("zebra.txt", "content").unwrap();
+        temp_fs.create_directory("mid_dir").unwrap();
+
+        let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
+        assert!(browser.files.first().unwrap().is_directory);
+
+        browser.sort_by_name();
+        assert!(
+            browser.files.first().unwrap().is_directory,
+            "directories stay at the top when the order is reversed"
+        );
+    }
+
+    #[test]
+    fn test_name_sort_keeps_the_selected_file() {
+        let temp_fs = TestFileSystem::new().unwrap();
+        for name in ["alpha.txt", "beta.txt", "zebra.txt"] {
+            temp_fs.create_file(name, "content").unwrap();
+        }
+
+        let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
+        browser.update_max_visible_files(10);
+        let index = browser
+            .files
+            .iter()
+            .position(|f| f.name == "beta.txt")
+            .unwrap();
+        browser.set_selected_index(index);
+
+        browser.sort_by_name();
+
+        assert_eq!(browser.get_selected_file().unwrap().name, "beta.txt");
     }
 
     #[test]
@@ -878,7 +979,7 @@ mod tests {
         let mut browser = FileBrowser::new_with_dir(temp_fs.get_path()).unwrap();
 
         // Initially should be sorted by name
-        assert_eq!(browser.sort_mode, SortMode::Name);
+        assert_eq!(browser.sort_mode, SortMode::NameAscending);
 
         // First press of 'd' should sort by date newest first
         browser.sort_by_date();

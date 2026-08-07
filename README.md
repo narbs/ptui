@@ -27,7 +27,7 @@ Features
 - Open in file system browser (if available)
 - Delete file
 - Save picture to ascii
-- Sort by date asc/desc or name
+- Sort by date asc/desc or name asc/desc
 - Dynamic reloading of configuration
 
 Requirements
@@ -78,7 +78,7 @@ Controls:
     c                 - Copy file to a folder
     m                 - Move file to a folder
     s                 - Save file to ascii
-    d, n              - Sort by date (toggle newest/oldest), n: Sort by name
+    d, n              - Sort by date (toggle newest/oldest), n: Sort by name (toggle A-Z/Z-A)
     Home/End          - Home: Go to start, End: Go to end
     o                 - Open in system file browser (if available)
     q / Ctrl+C        - Quit
