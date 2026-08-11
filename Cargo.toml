@@ -1,6 +1,6 @@
 [package]
 name = "ptui"
-version = "2.3.0"
+version = "2.3.1"
 edition = "2024"
 authors = ["Christian Clare"]
 description = "Picture TUI"
