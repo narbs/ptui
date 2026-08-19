@@ -13,11 +13,14 @@ up did not.
 Configuration files may also now set only the keys they care about, with everything else taking its
 default. Unknown keys were already ignored, so requiring every known one was the odd rule out.
 
+Ctrl+C now quits, from anywhere including while a dialog is open. It used to open the copy dialog,
+because c is the copy shortcut and the binding took no modifier. The README had said Ctrl+C quits
+for some time, so this makes the program agree with its own documentation rather than the other way
+round.
+
 Ctrl+F and Ctrl+B are named in the help. They have been bound for a long time but appeared nowhere
 in it. The README's list of controls has been brought back in line with the keys the app actually
-binds: it was missing Page Up, Ctrl+F/Ctrl+B, f/b, r, u and Esc, and it claimed Ctrl+C quits. It
-does not - c is the copy shortcut and takes no modifier, so Ctrl+C opens the copy dialog. Quit with
-q or Esc.
+binds: it was missing Page Up, Ctrl+F/Ctrl+B, f/b, r, u and Esc.
 
 Aug 19, 2026
 ------------

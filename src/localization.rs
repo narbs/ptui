@@ -279,6 +279,12 @@ mod tests {
             "page-jump help should name the Ctrl shortcut in {}",
             locale
         );
+        // Ctrl+C quits, so the help has to say so wherever it lists how to quit.
+        assert!(
+            localization.get("keys_quit").contains("+C"),
+            "quit help should name the Ctrl shortcut in {}",
+            locale
+        );
     }
 
     #[rstest::rstest]

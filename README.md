@@ -90,11 +90,10 @@ Controls:
     o                 - Open in system file browser (if available)
     TAB               - Cycle between converters
     ?                 - Help
-    q / Esc           - Quit
+    q / Esc / Ctrl+C  - Quit
 ```
 
-Note that Ctrl+C does not quit; it opens the copy dialog, because `c` is the copy
-shortcut. Use `q` or `Esc`.
+Ctrl+C quits from anywhere, including while a dialog is open.
 
 Star ratings
 ------------

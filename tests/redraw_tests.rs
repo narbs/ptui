@@ -1,14 +1,18 @@
 //! The main loop only draws when the app asks it to, so an action whose result is invisible
 //! until the next keypress is indistinguishable from one that did nothing.
 //!
-//! This file holds a single test because it changes the process working directory, which
-//! `ChafaTui::new()` reads; a second test running in parallel would see it move underneath.
+//! The tests here change the process working directory, which `ChafaTui::new()` reads, so
+//! they take a lock rather than running in parallel and pulling it out from under each other.
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 use ptui::app::ChafaTui;
 use ratatui::{Terminal, backend::TestBackend};
 use std::process::Command;
+use std::sync::Mutex;
 use tempfile::TempDir;
+
+/// The working directory is process-wide, so only one test may own it at a time.
+static CWD: Mutex<()> = Mutex::new(());
 
 /// ptui needs chafa and identify to render at all, but a contributor without them should
 /// get a skipped test rather than a failure.
@@ -44,6 +48,7 @@ fn press(app: &mut ChafaTui, c: char) -> bool {
 
 #[test]
 fn actions_that_report_something_ask_for_a_redraw() {
+    let _cwd = CWD.lock().unwrap_or_else(|e| e.into_inner());
     if !rendering_tools_available() {
         eprintln!("skipping: chafa or identify is not installed");
         return;
@@ -94,5 +99,72 @@ fn actions_that_report_something_ask_for_a_redraw() {
     assert!(
         press(&mut app, 'x'),
         "the 'cannot delete directories' message needs a redraw to appear"
+    );
+}
+
+#[test]
+fn ctrl_c_quits_rather_than_opening_the_copy_dialog() {
+    let _cwd = CWD.lock().unwrap_or_else(|e| e.into_inner());
+    if !rendering_tools_available() {
+        eprintln!("skipping: chafa or identify is not installed");
+        return;
+    }
+
+    let temp = TempDir::new().unwrap();
+    if !generate_image(&temp.path().join("sample.jpg")) {
+        eprintln!("skipping: could not generate a test image with ImageMagick");
+        return;
+    }
+    std::env::set_current_dir(temp.path()).unwrap();
+
+    let ctrl_c = KeyEvent::new_with_kind(
+        KeyCode::Char('c'),
+        KeyModifiers::CONTROL,
+        KeyEventKind::Press,
+    );
+
+    let mut app = ChafaTui::new().unwrap();
+    assert!(
+        app.handle_key_event(ctrl_c).is_err(),
+        "Ctrl+C should quit; without a modifier guard it matches the copy binding instead"
+    );
+
+    // And it gets out from under a dialog too, which is the state a user is most likely to
+    // be reaching for it in.
+    let mut app = ChafaTui::new().unwrap();
+    let mut term = Terminal::new(TestBackend::new(120, 40)).unwrap();
+    term.draw(|f| app.draw(f)).unwrap();
+    press(&mut app, 'j');
+    press(&mut app, 'c'); // open the copy dialog
+    term.draw(|f| app.draw(f)).unwrap();
+    let screen: String = term
+        .backend()
+        .buffer()
+        .content()
+        .iter()
+        .map(|c| c.symbol())
+        .collect();
+    assert!(
+        screen.contains("Copy File"),
+        "the copy dialog should be open"
+    );
+
+    assert!(
+        app.handle_key_event(ctrl_c).is_err(),
+        "Ctrl+C should quit even with a dialog open"
+    );
+
+    // A plain c still copies, so the guard did not swallow the ordinary binding.
+    let mut app = ChafaTui::new().unwrap();
+    term.draw(|f| app.draw(f)).unwrap();
+    press(&mut app, 'j');
+    assert!(
+        app.handle_key_event(KeyEvent::new_with_kind(
+            KeyCode::Char('c'),
+            KeyModifiers::NONE,
+            KeyEventKind::Press
+        ))
+        .is_ok(),
+        "plain c should still open the copy dialog"
     );
 }

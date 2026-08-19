@@ -181,6 +181,14 @@ impl ChafaTui {
     }
 
     pub fn handle_key_event(&mut self, key: KeyEvent) -> Result<(), Box<dyn Error>> {
+        // Ctrl+C quits, ahead of the dialogs, because that is what it means in a terminal
+        // and a user reaching for it wants out rather than a cancelled field. Raw mode
+        // suppresses the signal, so it arrives here as an ordinary key. Without the guard
+        // it would match the plain 'c' arm below and open the copy dialog instead.
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Err("Quit".into());
+        }
+
         // Handle delete confirmation dialog first if it's showing
         if self.show_delete_confirmation {
             self.handle_delete_confirmation(key)?;
@@ -200,6 +208,7 @@ impl ChafaTui {
         }
 
         match key.code {
+            // Ctrl+C is handled above, before the dialogs.
             KeyCode::Char('q') | KeyCode::Esc => return Err("Quit".into()),
             KeyCode::Down | KeyCode::Char('j') => {
                 self.show_help_on_startup = false;
