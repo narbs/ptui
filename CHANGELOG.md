@@ -4,6 +4,16 @@ PTUI - Picture TUI - CHANGELOG
 Aug 18, 2026
 ------------
 
+PTUI 2.4.1 released. Fixes a rating lost when copying or moving a file in a folder where you
+declined XMP sidecars. Those ratings are kept in ptui's own state file, keyed by the file's full
+path, and were not updated when the file went somewhere else: after a move the rating was stranded
+under the old path and the file showed as unrated at its destination, and a copy arrived unrated
+where a sidecar would have been carried across. Ratings stored in sidecars, which is the default,
+were never affected, and deleting a file already cleared both kinds.
+
+Aug 18, 2026
+------------
+
 PTUI 2.4.0 released. Star ratings. Press 1 to 5 to rate the selected file, 0 to clear it, or * for
 five; the rating shows as a star and a number beside the file name. Ratings are written to XMP
 sidecar files using the standard xmp:Rating property, the same one darktable, digiKam, RawTherapee,
