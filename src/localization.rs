@@ -200,6 +200,8 @@ mod tests {
             "keys_refresh_image",
             "keys_save_ascii",
             "keys_rating",
+            "rating_sort_highest_first",
+            "rating_sort_lowest_first",
             "keys_delete_file",
             "keys_copy_file",
             "keys_move_file",
@@ -214,6 +216,61 @@ mod tests {
             assert!(!message.is_empty(), "Key {} should have a message", key);
             assert_ne!(message, *key, "Key {} should be translated", key);
         }
+    }
+
+    #[rstest::rstest]
+    #[case("en")]
+    #[case("de")]
+    #[case("es")]
+    #[case("fr")]
+    #[case("ja")]
+    #[case("zh")]
+    fn test_rating_keys_translated_in_all_locales(#[case] locale: &str) {
+        let localization = Localization::new(locale).unwrap();
+
+        let rating_keys = [
+            "keys_rating",
+            "keys_sort",
+            "keys_save_ascii",
+            "cannot_rate_directory",
+            "rating_cleared",
+            "rating_sidecar_failed",
+            "rating_sort_highest_first",
+            "rating_sort_lowest_first",
+            "sidecar_consent_title",
+            "sidecar_consent_explanation",
+            "sidecar_consent_instructions",
+        ];
+
+        for key in &rating_keys {
+            let message = localization.get(key);
+            assert!(!message.is_empty(), "{} is empty in {}", key, locale);
+            assert_ne!(message, *key, "{} is untranslated in {}", key, locale);
+        }
+    }
+
+    #[rstest::rstest]
+    #[case("en")]
+    #[case("de")]
+    #[case("es")]
+    #[case("fr")]
+    #[case("ja")]
+    #[case("zh")]
+    fn test_shortcut_help_names_the_keys_that_are_bound(#[case] locale: &str) {
+        // The help text is the only place a user learns these, so a rebinding that misses a
+        // translation would leave that language pointing at the wrong key.
+        let localization = Localization::new(locale).unwrap();
+
+        assert!(
+            localization.get("keys_save_ascii").starts_with('i'),
+            "save-ascii help should name i in {}",
+            locale
+        );
+        assert!(
+            localization.get("keys_sort").contains('s'),
+            "sort help should name s in {}",
+            locale
+        );
     }
 
     #[rstest::rstest]
