@@ -26,6 +26,7 @@ pub mod helpers {
             locale: Some("en".to_string()),
             slideshow_delay_ms: Some(1000),
             slideshow_transitions: Some(crate::config::SlideshowTransitionConfig::default()),
+            stars: Some(crate::config::StarsConfig::default()),
             chafa: None,
         }
     }

@@ -12,9 +12,27 @@ use ratatui::{
 use ratatui_image::{Resize, StatefulImage};
 use std::path::Path;
 
-const WIDE_SCREEN_WIDTH_PERCENT: u16 = 10;
-const NARROW_SCREEN_WIDTH_PERCENT: u16 = 15;
-const NARROW_SCREEN_CHAR_CUTOFF: u16 = 120;
+/// Share of the terminal width given to the file browser on a roomy screen.
+const FILE_BROWSER_WIDTH_PERCENT: u16 = 12;
+
+/// Columns the file pane should not fall below, before the rating column is added.
+///
+/// A flat percentage scales the wrong way on a narrow terminal: the borders, the file-type
+/// icon and the rating column cost a constant number of columns, so a small percentage of a
+/// small width leaves almost nothing for the name itself. This floor keeps roughly a dozen
+/// characters of file name readable at any width.
+const MIN_FILE_BROWSER_COLUMNS: u16 = 18;
+
+/// Ceiling on the file pane's share, so the floor cannot crowd out the preview on a tiny
+/// terminal where the minimum would otherwise exceed the whole width.
+const MAX_FILE_BROWSER_PERCENT: u16 = 60;
+
+/// Columns the rating indicator occupies in the file list.
+///
+/// The file pane is widened by exactly this much so that adding ratings did not quietly
+/// cost every file name three characters. A fixed offset rather than a larger percentage,
+/// because the indicator costs the same three columns whatever the terminal width.
+const RATING_COLUMN_WIDTH: u16 = 3;
 
 pub struct UILayout {
     pub preview_size: u16,
@@ -40,12 +58,19 @@ impl UILayout {
     }
 
     pub fn calculate_layout(&mut self, area: Rect) -> (Rect, Rect, Rect) {
-        // Determine file browser width based on screen size
-        let file_browser_width = if area.width > NARROW_SCREEN_CHAR_CUTOFF {
-            WIDE_SCREEN_WIDTH_PERCENT
-        } else {
-            NARROW_SCREEN_WIDTH_PERCENT
-        };
+        // The file pane takes a fixed share of the width, raised on narrow terminals to
+        // whatever a readable pane needs. Expressed as a minimum percentage rather than a
+        // minimum column count so that [ and ] keep working normally from wherever the
+        // floor puts the divider, instead of appearing dead until the percentage catches up.
+        // Deliberately rounded down: the exact floor is applied to the column count below,
+        // and a percentage that rounded up would land a column above it at some widths and
+        // on it at others, making the pane jitter by a column as the terminal is resized.
+        let floor_percent = (MIN_FILE_BROWSER_COLUMNS * 100)
+            .checked_div(area.width)
+            .unwrap_or(FILE_BROWSER_WIDTH_PERCENT);
+        let file_browser_width = FILE_BROWSER_WIDTH_PERCENT
+            .max(floor_percent)
+            .min(MAX_FILE_BROWSER_PERCENT);
 
         self.min_divider_percent = file_browser_width;
 
@@ -53,6 +78,9 @@ impl UILayout {
         if self.preview_size == 0 {
             self.preview_size = file_browser_width;
         }
+
+        // Shrinking the terminal can raise the floor above the current divider.
+        self.preview_size = self.preview_size.max(file_browser_width);
 
         // Main vertical layout with debug pane at bottom
         // Use flexible debug pane height for small screens
@@ -65,13 +93,18 @@ impl UILayout {
             ])
             .split(area);
 
-        // Horizontal layout for file browser and preview
+        // Horizontal layout for file browser and preview. The file pane takes its share as
+        // a percentage, plus the fixed width of the rating column, and the preview takes
+        // whatever is left so the two always add up to the full width.
+        let content_width = main_chunks[0].width;
+        let file_browser_cells = (content_width * self.preview_size / 100)
+            .max(MIN_FILE_BROWSER_COLUMNS)
+            .saturating_add(RATING_COLUMN_WIDTH)
+            .clamp(1, content_width.saturating_sub(1).max(1));
+
         let content_chunks = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([
-                Constraint::Percentage(self.preview_size),
-                Constraint::Percentage(100 - self.preview_size),
-            ])
+            .constraints([Constraint::Length(file_browser_cells), Constraint::Min(0)])
             .split(main_chunks[0]);
 
         // Update preview dimensions
@@ -157,6 +190,17 @@ pub fn shorten_path_text(text: &str, max_chars: usize) -> String {
     format!("...{}", tail)
 }
 
+/// The rating prefix for a file list row: a star and a digit when rated, blanks when not.
+///
+/// Always three columns wide so that rating a file does not shift every name in the folder.
+fn rating_column(rating: u8) -> String {
+    if rating == 0 {
+        " ".repeat(RATING_COLUMN_WIDTH as usize)
+    } else {
+        format!("\u{2605}{} ", rating)
+    }
+}
+
 /// Rows a line of text needs once wrapped to `width`, matching how Paragraph breaks on
 /// word boundaries and hard-breaks words too long to fit. Widths are display columns, not
 /// characters, so CJK text is measured correctly. Used to size dialogs to their content so
@@ -219,7 +263,14 @@ impl UIRenderer {
                     Style::default()
                 };
 
-                ListItem::new(content).style(style)
+                // A fixed-width rating column, blank when unrated, so file names stay
+                // aligned whether or not anything in the folder has been rated.
+                let rating = Span::styled(
+                    rating_column(file.rating),
+                    Style::default().fg(Color::Yellow),
+                );
+
+                ListItem::new(Line::from(vec![rating, Span::styled(content, style)])).style(style)
             })
             .collect();
 
@@ -672,6 +723,60 @@ impl UIRenderer {
         f.render_widget(dialog_paragraph, popup_area);
     }
 
+    /// Ask, once per folder, before ptui creates XMP sidecar files in it.
+    ///
+    /// Writing files into someone's photo folder as a side effect of a keypress is the kind
+    /// of thing that deserves an explicit yes, and the prompt names the exact file so the
+    /// answer is informed rather than a guess at what "sidecar" means.
+    pub fn render_sidecar_consent_dialog(
+        f: &mut Frame,
+        area: Rect,
+        sidecar_name: &str,
+        localization: &Localization,
+    ) {
+        use fluent::fluent_args;
+
+        let dialog_width = 62.min(area.width.saturating_sub(4));
+        let text_width = dialog_width.saturating_sub(2) as usize;
+
+        let args = fluent_args!["file" => sidecar_name];
+        let prompt = localization.get_with_args("sidecar_consent_prompt", Some(&args));
+        let explanation = localization.get("sidecar_consent_explanation");
+        let instructions = localization.get("sidecar_consent_instructions");
+
+        let content_rows = wrapped_rows(&prompt, text_width)
+            + 1
+            + wrapped_rows(&explanation, text_width)
+            + 1
+            + wrapped_rows(&instructions, text_width);
+        let dialog_height = (content_rows as u16 + 2).min(area.height.saturating_sub(2));
+
+        let popup_area = centered_rect(dialog_width, dialog_height, area);
+        f.render_widget(Clear, popup_area);
+
+        let body = format!("{}\n\n{}\n\n{}", prompt, explanation, instructions);
+
+        let dialog_block = Block::default()
+            .title(format!(
+                "\u{2605}  {}",
+                localization.get("sidecar_consent_title")
+            ))
+            .borders(Borders::ALL)
+            .style(
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            );
+
+        let dialog_paragraph = Paragraph::new(body)
+            .block(dialog_block)
+            .wrap(Wrap { trim: true })
+            .alignment(Alignment::Center)
+            .style(Style::default().fg(Color::White));
+
+        f.render_widget(dialog_paragraph, popup_area);
+    }
+
     /// Render the copy/move destination dialog.
     pub fn render_transfer_dialog(
         f: &mut Frame,
@@ -816,7 +921,8 @@ mod tests {
 
         let (file_area, preview_area, debug_area) = layout.calculate_layout(area);
 
-        assert_eq!(layout.min_divider_percent, WIDE_SCREEN_WIDTH_PERCENT);
+        // Wide enough that the base share already clears the floor.
+        assert_eq!(layout.min_divider_percent, FILE_BROWSER_WIDTH_PERCENT);
         assert!(file_area.width > 0);
         assert!(preview_area.width > 0);
         assert!(debug_area.height == 3);
@@ -830,7 +936,9 @@ mod tests {
 
         let (file_area, preview_area, debug_area) = layout.calculate_layout(area);
 
-        assert_eq!(layout.min_divider_percent, NARROW_SCREEN_WIDTH_PERCENT);
+        // Narrow enough that the floor raises the share above the base percentage.
+        assert!(layout.min_divider_percent > FILE_BROWSER_WIDTH_PERCENT);
+        assert!(file_area.width >= MIN_FILE_BROWSER_COLUMNS);
         assert!(file_area.width > 0);
         assert!(preview_area.width > 0);
         assert!(debug_area.height == 3);
@@ -924,11 +1032,11 @@ mod tests {
     }
 
     #[rstest::rstest]
-    #[case(80, NARROW_SCREEN_WIDTH_PERCENT)]
-    #[case(100, NARROW_SCREEN_WIDTH_PERCENT)]
-    #[case(120, NARROW_SCREEN_WIDTH_PERCENT)]
-    #[case(130, WIDE_SCREEN_WIDTH_PERCENT)]
-    #[case(200, WIDE_SCREEN_WIDTH_PERCENT)]
+    #[case(80, 22)]
+    #[case(100, 18)]
+    #[case(120, 15)]
+    #[case(130, 13)]
+    #[case(200, FILE_BROWSER_WIDTH_PERCENT)]
     fn test_ui_layout_screen_width_logic(#[case] width: u16, #[case] expected_percent: u16) {
         let mut layout = UILayout::new();
         let area = Rect::new(0, 0, width, 40);
@@ -936,6 +1044,49 @@ mod tests {
         layout.calculate_layout(area);
 
         assert_eq!(layout.min_divider_percent, expected_percent);
+    }
+
+    /// The file pane must never shrink as the terminal grows.
+    ///
+    /// It used to: a cutoff at 120 columns dropped the share from 15% to 10%, so a
+    /// 140-column terminal gave a narrower pane than a 120-column one.
+    #[test]
+    fn test_file_pane_never_shrinks_as_the_terminal_widens() {
+        let mut previous = 0;
+
+        for width in 60u16..=320 {
+            let mut layout = UILayout::new();
+            let (file_area, preview_area, _) = layout.calculate_layout(Rect::new(0, 0, width, 40));
+
+            assert!(
+                file_area.width >= previous,
+                "pane shrank from {} to {} at width {}",
+                previous,
+                file_area.width,
+                width
+            );
+            assert!(
+                preview_area.width > 0,
+                "preview vanished at width {}",
+                width
+            );
+            previous = file_area.width;
+        }
+    }
+
+    #[test]
+    fn test_narrow_terminals_keep_a_readable_file_pane() {
+        for width in [60u16, 80, 100, 120, 140] {
+            let mut layout = UILayout::new();
+            let (file_area, _, _) = layout.calculate_layout(Rect::new(0, 0, width, 40));
+
+            assert!(
+                file_area.width >= MIN_FILE_BROWSER_COLUMNS,
+                "pane was only {} columns at width {}",
+                file_area.width,
+                width
+            );
+        }
     }
 
     #[test]

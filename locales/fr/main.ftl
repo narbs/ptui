@@ -70,3 +70,13 @@ transfer_copied = Copié
 transfer_moved = Déplacé
 transfer_failed = Échec du transfert
 cannot_transfer_directory = Impossible de copier ou déplacer des dossiers
+
+keys_rating = 0-5 : Noter le fichier actuel (0 efface), * : Noter 5
+cannot_rate_directory = Impossible de noter un répertoire
+rating_set = Noté {$stars}
+rating_cleared = Note effacée
+rating_sidecar_failed = Impossible d'écrire le fichier sidecar, note conservée uniquement dans ptui
+sidecar_consent_title = Créer un fichier sidecar ?
+sidecar_consent_prompt = ptui va créer {$file} dans ce dossier.
+sidecar_consent_explanation = Les notes sont enregistrées dans des fichiers sidecar XMP, elles suivent donc les images et les autres logiciels photo peuvent les lire.
+sidecar_consent_instructions = 'y' autoriser ici, 'n' conserver uniquement dans ptui, Échap annuler

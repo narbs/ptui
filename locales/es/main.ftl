@@ -70,3 +70,13 @@ transfer_copied = Copiado
 transfer_moved = Movido
 transfer_failed = Error en la transferencia
 cannot_transfer_directory = No se pueden copiar ni mover carpetas
+
+keys_rating = 0-5: Valorar archivo actual (0 borra), *: Valorar con 5
+cannot_rate_directory = No se puede valorar un directorio
+rating_set = Valorado con {$stars}
+rating_cleared = Valoración borrada
+rating_sidecar_failed = No se pudo escribir el archivo sidecar, valoración guardada solo en ptui
+sidecar_consent_title = ¿Crear archivo sidecar?
+sidecar_consent_prompt = ptui creará {$file} en esta carpeta.
+sidecar_consent_explanation = Las valoraciones se guardan en archivos sidecar XMP, así se sincronizan con las imágenes y otros programas de fotos pueden leerlas.
+sidecar_consent_instructions = 'y' permitir aquí, 'n' guardar solo en ptui, Esc cancelar

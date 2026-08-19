@@ -3,7 +3,8 @@ use crate::converter;
 use crate::file_browser::FileBrowser;
 use crate::localization::Localization;
 use crate::preview::{PreviewContent, PreviewManager};
-use crate::state::PTuiState;
+use crate::ratings::{self, MAX_RATING};
+use crate::state::{PTuiState, RatingDestination, SidecarConsent, rating_destination};
 use crate::transfer::{self, Resolution, Stage, TransferAction, TransferDialog, TransferMode};
 use crate::transitions::TransitionManager;
 use crate::ui::{UILayout, UIRenderer};
@@ -61,8 +62,14 @@ pub struct ChafaTui {
     delete_target_file: Option<String>,
     // Copy/move destination dialog state
     transfer_dialog: Option<TransferDialog>,
-    // Persisted state (last copy/move destination)
+    // Sidecar consent dialog state: the rating awaiting the user's answer
+    pending_rating: Option<u8>,
+    // Name of the sidecar the prompt is asking permission to create
+    pending_sidecar_name: Option<String>,
+    // Persisted state (last copy/move destination, sidecar consent, fallback ratings)
     app_state: PTuiState,
+    // Star rating preferences
+    stars_config: crate::config::StarsConfig,
     // Dirty flag for render optimization
     needs_redraw: bool,
 }
@@ -115,11 +122,15 @@ impl ChafaTui {
             delete_target_file: None,
             // Copy/move destination dialog state
             transfer_dialog: None,
+            pending_rating: None,
+            pending_sidecar_name: None,
             app_state: PTuiState::load(),
+            stars_config: config.get_stars(),
             // Dirty flag for render optimization
             needs_redraw: true,
         };
 
+        app.apply_fallback_ratings();
         app.update_preview();
         Ok(app)
     }
@@ -171,6 +182,12 @@ impl ChafaTui {
         // Handle the copy/move destination dialog if it's showing
         if self.transfer_dialog.is_some() {
             self.handle_transfer_key(key);
+            return Ok(());
+        }
+
+        // Handle the one-time sidecar prompt if it's showing
+        if self.pending_rating.is_some() {
+            self.handle_sidecar_consent(key);
             return Ok(());
         }
 
@@ -258,6 +275,7 @@ impl ChafaTui {
                 self.show_help_toggle = false;
                 if self.file_browser.enter_directory()? {
                     self.preview_manager.clear_cache();
+                    self.apply_fallback_ratings();
                     self.update_preview();
                 }
             }
@@ -266,6 +284,7 @@ impl ChafaTui {
                 self.show_help_toggle = false;
                 if self.file_browser.go_to_parent()? {
                     self.preview_manager.clear_cache();
+                    self.apply_fallback_ratings();
                     self.update_preview();
                 }
             }
@@ -323,6 +342,17 @@ impl ChafaTui {
                 } else {
                     self.enter_slideshow_mode();
                 }
+            }
+            KeyCode::Char(c @ '0'..='5') => {
+                self.show_help_on_startup = false;
+                self.show_help_toggle = false;
+                // `as u8 - b'0'` is safe here: the pattern admits only ASCII digits.
+                self.rate_selected(c as u8 - b'0');
+            }
+            KeyCode::Char('*') => {
+                self.show_help_on_startup = false;
+                self.show_help_toggle = false;
+                self.rate_selected(MAX_RATING);
             }
             KeyCode::Char('?') => {
                 self.show_help_on_startup = false;
@@ -456,6 +486,10 @@ impl ChafaTui {
     }
 
     fn refresh_current_preview(&mut self) {
+        // Re-read the rating from disk as well as the image. Another tool may have changed
+        // it in the meantime -- a sidecar is a shared record, and ptui is not its only writer.
+        self.reload_selected_rating();
+
         if let Some(file) = self.file_browser.get_selected_file()
             && file.can_preview()
         {
@@ -466,6 +500,22 @@ impl ChafaTui {
             );
             self.update_preview();
         }
+    }
+
+    /// Re-read the selected file's rating, preferring its sidecar over the private store.
+    fn reload_selected_rating(&mut self) {
+        let Some(file) = self.file_browser.get_selected_file() else {
+            return;
+        };
+        let path = PathBuf::from(&file.path);
+        if file.is_directory {
+            return;
+        }
+
+        let rating = ratings::read_rating(&path)
+            .or_else(|| self.app_state.fallback_rating(&path))
+            .unwrap_or(0);
+        self.file_browser.set_selected_rating(rating);
     }
 
     fn save_ascii_file(&mut self) {
@@ -494,6 +544,7 @@ impl ChafaTui {
                             current_debug, e
                         );
                     }
+                    self.apply_fallback_ratings();
                     if !self.file_browser.select_first_available(&fallback_names) {
                         self.clamp_selection();
                     }
@@ -562,9 +613,18 @@ impl ChafaTui {
     fn delete_current_file(&mut self, file_name: String) -> Result<(), Box<dyn Error>> {
         if let Some(file) = self.file_browser.get_selected_file() {
             let file_path = &file.path;
+            let sidecar_source = PathBuf::from(file_path);
 
             match std::fs::remove_file(file_path) {
                 Ok(()) => {
+                    // Remove the rating alongside the file, so ptui does not leave behind
+                    // the orphaned sidecars that tools which only write them accumulate.
+                    if let Err(e) = ratings::remove_sidecar(&sidecar_source) {
+                        self.append_message(format!("WARNING: Failed to remove sidecar: {}", e));
+                    }
+                    self.app_state.set_fallback_rating(&sidecar_source, 0);
+                    self.app_state.save();
+
                     let current_debug = self.preview_manager.get_debug_info();
                     self.preview_manager.debug_info =
                         format!("{} | Deleted: {}", current_debug, file_name);
@@ -582,6 +642,7 @@ impl ChafaTui {
                             current_debug, e
                         );
                     }
+                    self.apply_fallback_ratings();
                     if !self.file_browser.select_first_available(&fallback_names) {
                         self.clamp_selection();
                     }
@@ -604,7 +665,9 @@ impl ChafaTui {
     /// True while any modal dialog is open. Graphical previews must not be drawn then,
     /// because the Kitty/iTerm2 image layer sits above the text cells.
     fn dialog_active(&self) -> bool {
-        self.show_delete_confirmation || self.transfer_dialog.is_some()
+        self.show_delete_confirmation
+            || self.transfer_dialog.is_some()
+            || self.pending_rating.is_some()
     }
 
     fn append_message(&mut self, message: String) {
@@ -715,6 +778,7 @@ impl ChafaTui {
                 if let Err(e) = self.file_browser.refresh_files() {
                     self.append_message(format!("WARNING: Failed to refresh file list: {}", e));
                 }
+                self.apply_fallback_ratings();
                 if !self.file_browser.select_first_available(&fallback_names) {
                     self.clamp_selection();
                 }
@@ -1057,6 +1121,11 @@ impl ChafaTui {
     }
 
     pub fn update_slideshow(&mut self) {
+        // A dialog is a question about the image on screen, so the slideshow holds still
+        // until it is answered rather than moving on to a different one.
+        if self.dialog_active() {
+            return;
+        }
         if self.is_slideshow_mode && self.slideshow_last_change.elapsed() >= self.slideshow_delay {
             // Only advance slideshow if no transition is in progress
             if !self.transition_manager.is_in_transition() {
@@ -1150,6 +1219,170 @@ impl ChafaTui {
         if let Some(ref dialog) = self.transfer_dialog {
             UIRenderer::render_transfer_dialog(f, size, dialog, &self.localization);
         }
+
+        // Render the one-time sidecar prompt overlay if needed
+        if self.pending_rating.is_some()
+            && let Some(ref sidecar_name) = self.pending_sidecar_name
+        {
+            UIRenderer::render_sidecar_consent_dialog(f, size, sidecar_name, &self.localization);
+        }
+    }
+
+    /// Apply privately stored ratings to the current listing.
+    ///
+    /// Called after every folder read, because the private store covers files whose folder
+    /// has no sidecar of its own and the browser cannot know about it.
+    fn apply_fallback_ratings(&mut self) {
+        let dir = PathBuf::from(&self.file_browser.current_dir);
+        let entries = self.app_state.fallback_ratings_in(&dir);
+        self.file_browser.apply_fallback_ratings(&entries);
+    }
+
+    /// Handle a rating key (0-5), asking about sidecars in this folder if need be.
+    fn rate_selected(&mut self, rating: u8) {
+        let rating = rating.min(MAX_RATING);
+
+        // A slideshow advances without moving the browser's selection, so point the
+        // selection at the image actually on screen before rating it. Rating during a
+        // slideshow is the natural way to cull a shoot, and it must hit the right file.
+        if self.is_slideshow_mode
+            && let Some(index) = self
+                .slideshow_image_files
+                .get(self.slideshow_current_index)
+                .copied()
+        {
+            self.file_browser.set_selected_index(index);
+        }
+
+        let Some(file) = self.file_browser.get_selected_file() else {
+            self.append_message("ERROR: No file selected".to_string());
+            return;
+        };
+        if file.is_directory {
+            self.append_message(self.localization.get("cannot_rate_directory").to_string());
+            return;
+        }
+
+        let path = PathBuf::from(&file.path);
+        let Some(dir) = path.parent().map(|p| p.to_path_buf()) else {
+            return;
+        };
+
+        let consent = self.app_state.sidecar_consent(&dir);
+        match rating_destination(&self.stars_config, consent) {
+            RatingDestination::Sidecar => self.write_sidecar_rating(rating),
+            RatingDestination::Fallback => self.store_fallback_rating(rating),
+            RatingDestination::Ask => {
+                // Creating files in someone's photo folder as a side effect of a keypress
+                // deserves an explicit yes, asked once per folder.
+                self.pending_rating = Some(rating);
+                self.pending_sidecar_name = Some(
+                    self.file_browser
+                        .sidecar_naming()
+                        .path_for(&path)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                );
+                self.needs_redraw = true;
+            }
+        }
+    }
+
+    /// Write the rating to an XMP sidecar, falling back to the private store on failure.
+    ///
+    /// A read-only folder is the common case here, and losing the rating outright would be a
+    /// worse answer than keeping it somewhere that at least ptui can read.
+    fn write_sidecar_rating(&mut self, rating: u8) {
+        let Some(file) = self.file_browser.get_selected_file() else {
+            return;
+        };
+        let path = PathBuf::from(&file.path);
+        let naming = self.file_browser.sidecar_naming();
+
+        match ratings::set_rating(&path, rating, naming) {
+            Ok(_) => {
+                self.file_browser.set_selected_rating(rating);
+                // A sidecar supersedes anything previously kept privately for this file.
+                self.app_state.set_fallback_rating(&path, 0);
+                self.app_state.save();
+                self.announce_rating(rating);
+                self.needs_redraw = true;
+            }
+            Err(e) => {
+                self.append_message(format!(
+                    "{}: {}",
+                    self.localization.get("rating_sidecar_failed"),
+                    e
+                ));
+                self.store_fallback_rating(rating);
+            }
+        }
+    }
+
+    /// Keep the rating in ptui's own store, for folders where a sidecar is not an option.
+    fn store_fallback_rating(&mut self, rating: u8) {
+        let Some(file) = self.file_browser.get_selected_file() else {
+            return;
+        };
+        let path = PathBuf::from(&file.path);
+
+        self.app_state.set_fallback_rating(&path, rating);
+        self.app_state.prune_missing_ratings();
+        self.app_state.save();
+        self.file_browser.set_selected_rating(rating);
+        self.announce_rating(rating);
+        self.needs_redraw = true;
+    }
+
+    fn announce_rating(&mut self, rating: u8) {
+        let message = if rating == 0 {
+            self.localization.get("rating_cleared").to_string()
+        } else {
+            let args = fluent::fluent_args!["stars" => rating.to_string()];
+            self.localization
+                .get_with_args("rating_set", Some(&args))
+                .to_string()
+        };
+        self.append_message(message);
+    }
+
+    /// Answer the one-time sidecar prompt for the current folder.
+    fn handle_sidecar_consent(&mut self, key: KeyEvent) {
+        let Some(rating) = self.pending_rating else {
+            return;
+        };
+        let dir = PathBuf::from(&self.file_browser.current_dir);
+
+        match key.code {
+            KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                self.app_state
+                    .set_sidecar_consent(&dir, SidecarConsent::Allow);
+                self.app_state.save();
+                self.dismiss_sidecar_prompt();
+                self.write_sidecar_rating(rating);
+            }
+            KeyCode::Char('n') | KeyCode::Char('N') => {
+                // Declining is remembered too, so the prompt does not reappear on the next
+                // keypress in a folder the user has already said no to.
+                self.app_state
+                    .set_sidecar_consent(&dir, SidecarConsent::Deny);
+                self.app_state.save();
+                self.dismiss_sidecar_prompt();
+                self.store_fallback_rating(rating);
+            }
+            KeyCode::Esc => {
+                // Escape cancels the rating outright rather than answering for the folder.
+                self.dismiss_sidecar_prompt();
+            }
+            _ => {}
+        }
+    }
+
+    fn dismiss_sidecar_prompt(&mut self) {
+        self.pending_rating = None;
+        self.pending_sidecar_name = None;
+        self.needs_redraw = true;
     }
 
     fn is_text_file_selected(&self) -> bool {

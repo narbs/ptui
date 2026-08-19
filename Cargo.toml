@@ -44,6 +44,7 @@ ratatui = "0.30"
 ratatui-image = "10.0.2"
 turbojpeg = { version = "1.0", optional = true }
 tempfile = "3.12"
+quick-xml = "0.41"
 
 [features]
 default = []

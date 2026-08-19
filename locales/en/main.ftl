@@ -71,3 +71,13 @@ transfer_copied = Copied
 transfer_moved = Moved
 transfer_failed = Transfer failed
 cannot_transfer_directory = Cannot copy or move directories
+
+keys_rating = 0-5: Rate current file (0 clears), *: Rate 5
+cannot_rate_directory = Cannot rate a directory
+rating_set = Rated {$stars}
+rating_cleared = Rating cleared
+rating_sidecar_failed = Could not write sidecar, rating kept in ptui only
+sidecar_consent_title = Create sidecar file?
+sidecar_consent_prompt = ptui will create {$file} in this folder.
+sidecar_consent_explanation = Ratings are stored in XMP sidecar files, so they sync with the images and other photo tools can read them.
+sidecar_consent_instructions = 'y' allow here, 'n' keep ratings in ptui only, Esc cancel

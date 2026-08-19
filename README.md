@@ -28,6 +28,7 @@ Features
 - Delete file
 - Save picture to ascii
 - Sort by date asc/desc or name asc/desc
+- Star ratings stored as XMP sidecars, readable by darktable, digiKam and Lightroom
 - Dynamic reloading of configuration
 
 Requirements
@@ -78,6 +79,7 @@ Controls:
     c                 - Copy file to a folder
     m                 - Move file to a folder
     s                 - Save file to ascii
+    0-5 / *           - Rate the selected file (0 clears, * rates 5)
     d, n              - Sort by date (toggle newest/oldest), n: Sort by name (toggle A-Z/Z-A)
     Home/End          - Home: Go to start, End: Go to end
     o                 - Open in system file browser (if available)
@@ -85,6 +87,49 @@ Controls:
     TAB               - Cycle between converters
     ?                 - Help
 ```
+
+Star ratings
+------------
+Press `1` to `5` to rate the selected file, `0` to clear the rating, or `*` as a shortcut
+for five. The rating shows as a star and a number in the file list.
+
+Ratings are stored in XMP sidecar files - a small `.xmp` file next to the image, holding
+the standard `xmp:Rating` property. This is the same format darktable, digiKam,
+RawTherapee, Adobe Bridge and Lightroom use, so ratings made in ptui show up in those
+programs, sync with the images through Dropbox or rsync, and survive a move to another
+machine. Neither extended attributes nor a private database can do that.
+
+The trade-off is that ptui creates files in your image folders, so the first time you rate
+something in a folder it asks, and remembers your answer for that folder. Answer `n` and
+ratings for that folder are kept privately in ptui's own state file instead, where they
+work but do not sync or show up anywhere else. To skip the question, set `stars.sidecars`
+in the config to `"always"` or `"never"`:
+
+```json
+{
+  "stars": {
+    "sidecars": "ask"
+  }
+}
+```
+
+Both sidecar naming conventions are read:
+
+```
+    photo.jpg.xmp     appended  (darktable, digiKam)
+    photo.xmp         replaced  (Adobe tools)
+```
+
+ptui writes whichever one a folder already uses, and the appended form otherwise, since
+`photo.jpg` and `photo.png` in one folder would both map to `photo.xmp` under the replaced
+convention. Sidecars belonging to a file in the folder are hidden from the list; one whose
+image is gone stays visible so you can see it and delete it.
+
+An existing sidecar is never overwritten, only updated. Sidecars written by other programs
+can hold a great deal more than a rating - darktable keeps an entire edit history in
+them - so ptui changes `xmp:Rating` and `xmp:MetadataDate` and leaves everything else
+exactly as it found it. Deleting a file deletes its sidecar too, and copying or moving a
+file takes its sidecar along.
 
 Copying and moving files
 ------------------------

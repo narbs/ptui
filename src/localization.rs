@@ -70,7 +70,7 @@ impl Localization {
 
     pub fn get_help_text(&self) -> String {
         format!(
-            "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
+            "{}\n\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}",
             self.get("select_image_to_preview"),
             self.get("keys_navigation"),
             self.get("keys_page_navigation"),
@@ -82,6 +82,7 @@ impl Localization {
             self.get("keys_resize_window"),
             self.get("keys_refresh_image"),
             self.get("keys_save_ascii"),
+            self.get("keys_rating"),
             self.get("keys_delete_file"),
             self.get("keys_copy_file"),
             self.get("keys_move_file"),
@@ -198,6 +199,7 @@ mod tests {
             "keys_resize_window",
             "keys_refresh_image",
             "keys_save_ascii",
+            "keys_rating",
             "keys_delete_file",
             "keys_copy_file",
             "keys_move_file",

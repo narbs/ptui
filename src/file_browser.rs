@@ -1,4 +1,6 @@
+use crate::ratings::{self, SidecarNaming};
 use content_inspector::{ContentType, inspect};
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
 use std::io::Read;
@@ -33,6 +35,8 @@ pub struct FileItem {
     pub path: String,
     pub is_directory: bool,
     pub modified: SystemTime,
+    /// Star rating, 0 (unrated) to 5. Populated from XMP sidecars when the folder is read.
+    pub rating: u8,
 }
 
 impl FileItem {
@@ -42,6 +46,7 @@ impl FileItem {
             path,
             is_directory,
             modified,
+            rating: 0,
         }
     }
 
@@ -172,6 +177,8 @@ pub struct FileBrowser {
     pub sort_mode: SortMode,
     // Stack to track the last selected file in each directory for navigation
     dir_stack: Vec<(String, usize)>, // (directory_path, selected_index)
+    /// The sidecar convention this folder already uses, so ptui writes more of the same.
+    sidecar_naming: SidecarNaming,
 }
 
 impl FileBrowser {
@@ -190,6 +197,7 @@ impl FileBrowser {
             max_visible_files: 20,
             sort_mode: SortMode::NameAscending,
             dir_stack: Vec::new(),
+            sidecar_naming: SidecarNaming::default(),
         };
         browser.refresh_files()?;
         Ok(browser)
@@ -198,12 +206,27 @@ impl FileBrowser {
     pub fn refresh_files(&mut self) -> Result<(), Box<dyn Error>> {
         self.files.clear();
 
-        let entries = fs::read_dir(&self.current_dir)?;
+        let entries: Vec<fs::DirEntry> =
+            fs::read_dir(&self.current_dir)?.collect::<Result<_, _>>()?;
+
+        // Every name in the folder, gathered first so sidecars can be matched to the files
+        // they describe before deciding what to show.
+        let names: HashSet<String> = entries
+            .iter()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
 
         for entry in entries {
-            let entry = entry?;
             let file_type = entry.file_type()?;
             let path = entry.path();
+            let name = entry.file_name().to_string_lossy().into_owned();
+
+            // A sidecar belonging to a file in this folder is ptui's bookkeeping, not
+            // content, so it is hidden. An orphaned one stays visible: it is the only
+            // sign a user gets that a rated file was deleted from under it.
+            if ratings::is_sidecar_name(&name) && ratings::sidecar_has_partner(&name, &names) {
+                continue;
+            }
 
             let mut is_directory = file_type.is_dir();
 
@@ -223,15 +246,52 @@ impl FileBrowser {
                 .unwrap_or(SystemTime::UNIX_EPOCH);
 
             self.files.push(FileItem::new(
-                entry.file_name().to_string_lossy().into_owned(),
+                name,
                 path.to_string_lossy().into_owned(),
                 is_directory,
                 modified,
             ));
         }
 
+        // Read every sidecar once per folder rather than once per rendered frame: parsing is
+        // cheap but a library where each image has one would otherwise re-read hundreds of
+        // small files on every keypress.
+        self.sidecar_naming = ratings::detect_naming(&names);
+        let folder_ratings = ratings::scan_directory(Path::new(&self.current_dir), &names);
+        for file in &mut self.files {
+            if let Some(rating) = folder_ratings.get(&file.name) {
+                file.rating = *rating;
+            }
+        }
+
         self.sort_files();
         Ok(())
+    }
+
+    /// The sidecar convention to use when writing in the current folder.
+    pub fn sidecar_naming(&self) -> SidecarNaming {
+        self.sidecar_naming
+    }
+
+    /// Apply privately stored ratings, which cover files with no sidecar of their own.
+    ///
+    /// A sidecar always wins: it is the shared record, and the private store is only a
+    /// fallback for folders where one could not be written.
+    pub fn apply_fallback_ratings(&mut self, entries: &[(String, u8)]) {
+        for (name, rating) in entries {
+            if let Some(file) = self.files.iter_mut().find(|f| &f.name == name)
+                && file.rating == 0
+            {
+                file.rating = *rating;
+            }
+        }
+    }
+
+    /// Set the rating held in memory for the selected file, after it has been persisted.
+    pub fn set_selected_rating(&mut self, rating: u8) {
+        if let Some(file) = self.files.get_mut(self.selected_index) {
+            file.rating = rating;
+        }
     }
 
     fn sort_files(&mut self) {
@@ -1348,5 +1408,88 @@ mod tests {
         assert!(browser.select_first_available(&fallback));
 
         assert_eq!(browser.get_selected_file().unwrap().name, "b.txt");
+    }
+    #[test]
+    fn hides_paired_sidecars_from_the_listing() {
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(temp.path().join("a.png"), "x").unwrap();
+        std::fs::write(
+            temp.path().join("a.png.xmp"),
+            concat!(
+                r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">"#,
+                r#"<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">"#,
+                r#"<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Rating="4">"#,
+                r#"</rdf:Description></rdf:RDF></x:xmpmeta>"#,
+            ),
+        )
+        .unwrap();
+
+        let browser = FileBrowser::new_with_dir(temp.path()).unwrap();
+        let names: Vec<&str> = browser.files.iter().map(|f| f.name.as_str()).collect();
+
+        assert_eq!(
+            names,
+            vec!["a.png"],
+            "the sidecar is bookkeeping, not content"
+        );
+        assert_eq!(
+            browser.files[0].rating, 4,
+            "its rating is read into the listing"
+        );
+    }
+
+    #[test]
+    fn keeps_orphaned_sidecars_visible() {
+        // An orphan is the only sign a user gets that a rated file was deleted from under
+        // it, so hiding it would make the mess invisible rather than absent.
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(temp.path().join("gone.xmp"), "<x/>").unwrap();
+
+        let browser = FileBrowser::new_with_dir(temp.path()).unwrap();
+        let names: Vec<&str> = browser.files.iter().map(|f| f.name.as_str()).collect();
+
+        assert_eq!(names, vec!["gone.xmp"]);
+    }
+
+    #[test]
+    fn files_start_unrated() {
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(temp.path().join("a.png"), "x").unwrap();
+
+        let browser = FileBrowser::new_with_dir(temp.path()).unwrap();
+        assert_eq!(browser.files[0].rating, 0);
+    }
+
+    #[test]
+    fn fallback_ratings_never_override_a_sidecar() {
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::write(temp.path().join("a.png"), "x").unwrap();
+        std::fs::write(
+            temp.path().join("a.png.xmp"),
+            concat!(
+                r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">"#,
+                r#"<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">"#,
+                r#"<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:Rating="5">"#,
+                r#"</rdf:Description></rdf:RDF></x:xmpmeta>"#,
+            ),
+        )
+        .unwrap();
+        std::fs::write(temp.path().join("b.png"), "x").unwrap();
+
+        let mut browser = FileBrowser::new_with_dir(temp.path()).unwrap();
+        browser.apply_fallback_ratings(&[("a.png".to_string(), 1), ("b.png".to_string(), 2)]);
+
+        let rating = |name: &str| {
+            browser
+                .files
+                .iter()
+                .find(|f| f.name == name)
+                .unwrap()
+                .rating
+        };
+
+        // The sidecar is the shared record; the private store only fills the gaps.
+        assert_eq!(rating("a.png"), 5);
+        assert_eq!(rating("b.png"), 2);
     }
 }

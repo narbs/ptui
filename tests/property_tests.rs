@@ -75,6 +75,7 @@ proptest! {
             locale: locale.clone(),
             slideshow_delay_ms: delay_ms,
             slideshow_transitions: Some(config::SlideshowTransitionConfig::default()),
+            stars: Some(ptui::config::StarsConfig::default()),
             chafa: None,
         };
 
