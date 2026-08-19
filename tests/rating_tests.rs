@@ -247,3 +247,85 @@ fn widening_survives_the_resize_keys() {
     assert_eq!(back.width, start.width, "resizing round-trips");
     assert!(wider.width > start.width);
 }
+
+#[test]
+fn a_privately_stored_rating_follows_a_move_the_way_a_sidecar_does() {
+    // Folders where the user declined sidecars keep ratings in ptui's own store, keyed by
+    // absolute path. Those ratings have to travel with the file too, or declining sidecars
+    // would quietly mean losing ratings on every move.
+    let temp = TempDir::new().unwrap();
+    let dest = temp.path().join("keepers");
+    fs::create_dir(&dest).unwrap();
+    let photo = image(temp.path(), "photo.jpg");
+
+    let mut state = PTuiState::default();
+    state.set_sidecar_consent(temp.path(), SidecarConsent::Deny);
+    state.set_fallback_rating(&photo, 4);
+
+    let moved = transfer::perform(TransferMode::Move, &photo, &dest).unwrap();
+    state.transfer_rating(&photo, &moved, true);
+
+    // No sidecar was ever written, so nothing should appear beside either file.
+    assert!(!dest.join("photo.jpg.xmp").exists());
+    assert_eq!(ratings::read_rating(&moved), None);
+
+    // The rating still reaches the listing at the new location.
+    let mut browser = FileBrowser::new_with_dir(&dest).unwrap();
+    browser.apply_fallback_ratings(&state.fallback_ratings_in(&dest));
+    assert_eq!(rating_of(&browser, "photo.jpg"), 4);
+
+    // And is not left stranded under the old path.
+    let mut old = FileBrowser::new_with_dir(temp.path()).unwrap();
+    old.apply_fallback_ratings(&state.fallback_ratings_in(temp.path()));
+    assert!(old.files.iter().all(|f| f.rating == 0));
+}
+
+#[test]
+fn a_privately_stored_rating_is_copied_to_the_copy() {
+    let temp = TempDir::new().unwrap();
+    let dest = temp.path().join("elsewhere");
+    fs::create_dir(&dest).unwrap();
+    let photo = image(temp.path(), "photo.jpg");
+
+    let mut state = PTuiState::default();
+    state.set_fallback_rating(&photo, 3);
+
+    let copied = transfer::perform(TransferMode::Copy, &photo, &dest).unwrap();
+    state.transfer_rating(&photo, &copied, false);
+
+    assert_eq!(state.fallback_rating(&copied), Some(3));
+    assert_eq!(
+        state.fallback_rating(&photo),
+        Some(3),
+        "the original keeps its rating"
+    );
+}
+
+#[test]
+fn deleting_a_file_clears_both_kinds_of_rating() {
+    let temp = TempDir::new().unwrap();
+    let photo = image(temp.path(), "photo.jpg");
+
+    // A file can carry both: a sidecar from before the user declined, and a private entry.
+    ratings::set_rating(&photo, 5, SidecarNaming::default()).unwrap();
+    let mut state = PTuiState::default();
+    state.set_fallback_rating(&photo, 5);
+
+    fs::remove_file(&photo).unwrap();
+    ratings::remove_sidecar(&photo).unwrap();
+    state.set_fallback_rating(&photo, 0);
+
+    assert!(
+        !temp.path().join("photo.jpg.xmp").exists(),
+        "no orphaned sidecar"
+    );
+    assert!(
+        state.ratings.is_empty(),
+        "no orphaned entry in the private store"
+    );
+    assert_eq!(
+        fs::read_dir(temp.path()).unwrap().count(),
+        0,
+        "folder is empty"
+    );
+}
