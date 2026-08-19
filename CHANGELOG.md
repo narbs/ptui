@@ -4,7 +4,7 @@ PTUI - Picture TUI - CHANGELOG
 Aug 19, 2026
 ------------
 
-PTUI 2.5.1 released. A configuration file that cannot be parsed is no longer replaced with the
+PTUI 2.6.0 released. A configuration file that cannot be parsed is no longer replaced with the
 defaults. ptui now leaves it exactly as it is, runs on defaults for that session, and reports the
 problem with its line and column in the messages pane, so a stray comma no longer costs you the
 settings in the file. Editing the file while ptui is running already behaved this way; only starting
