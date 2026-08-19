@@ -416,7 +416,7 @@ fn rebuild_element(
     name: &str,
     rating: u8,
     prefixes: &HashSet<String>,
-    has_element_form: bool,
+    has_rating_already: bool,
     wrote_rating: &mut bool,
 ) -> Result<BytesStart<'static>, Box<dyn Error>> {
     let mut elem = BytesStart::new(name.to_string());
@@ -448,7 +448,7 @@ fn rebuild_element(
     }
 
     // No rating anywhere in the document yet: attach one to the first rdf:Description.
-    if !*wrote_rating && !has_element_form && rating > 0 && is_rdf_description(name) {
+    if !*wrote_rating && !has_rating_already && rating > 0 && is_rdf_description(name) {
         if !binds_xmp_here {
             // A second binding of the same URI on a descendant element is legal, and this
             // guarantees the prefix resolves even if the document bound XMP elsewhere.
@@ -471,7 +471,7 @@ fn rebuild_element(
 /// the user work ptui cannot see.
 fn merge_rating(xml: &str, rating: u8) -> Result<Option<String>, Box<dyn Error>> {
     let prefixes = xmp_prefixes(xml);
-    let has_element_form = has_rating_element(xml, &prefixes);
+    let has_rating_already = has_any_rating(xml, &prefixes);
 
     if rating == 0 && !holds_foreign_data(xml, &prefixes) {
         return Ok(None);
@@ -506,7 +506,7 @@ fn merge_rating(xml: &str, rating: u8) -> Result<Option<String>, Box<dyn Error>>
                     &name,
                     rating,
                     &prefixes,
-                    has_element_form,
+                    has_rating_already,
                     &mut wrote_rating,
                 )?;
                 writer.write_event(Event::Start(elem))?;
@@ -530,7 +530,7 @@ fn merge_rating(xml: &str, rating: u8) -> Result<Option<String>, Box<dyn Error>>
                     &name,
                     rating,
                     &prefixes,
-                    has_element_form,
+                    has_rating_already,
                     &mut wrote_rating,
                 )?;
                 // Must stay empty: re-emitting as a start tag would leave it unclosed.
@@ -566,7 +566,12 @@ fn merge_rating(xml: &str, rating: u8) -> Result<Option<String>, Box<dyn Error>>
     Ok(Some(String::from_utf8(bytes)?))
 }
 
-fn has_rating_element(xml: &str, prefixes: &HashSet<String>) -> bool {
+/// True when the document already carries a rating anywhere, in either form.
+///
+/// Real XMP often splits properties across several `rdf:Description` blocks, and a rating in
+/// a later block has to stop ptui adding a second one to the first. `xmp:Rating` is single
+/// valued, so a file carrying two of them is one no reader should have to arbitrate.
+fn has_any_rating(xml: &str, prefixes: &HashSet<String>) -> bool {
     let mut reader = Reader::from_str(xml);
     let mut buf = Vec::new();
     loop {
@@ -575,6 +580,12 @@ fn has_rating_element(xml: &str, prefixes: &HashSet<String>) -> bool {
                 let name = String::from_utf8_lossy(e.name().as_ref()).into_owned();
                 if is_xmp_property(&name, "Rating", prefixes) {
                     return true;
+                }
+                for attr in e.attributes().flatten() {
+                    let key = String::from_utf8_lossy(attr.key.as_ref()).into_owned();
+                    if is_xmp_property(&key, "Rating", prefixes) {
+                        return true;
+                    }
                 }
             }
             Ok(Event::Eof) | Err(_) => break,
@@ -818,6 +829,161 @@ mod tests {
         let once = merge_rating(WITH_HISTORY, 3).unwrap().unwrap();
         let twice = merge_rating(&once, 3).unwrap().unwrap();
         assert_eq!(once, twice);
+    }
+
+    /// A pretty-printed, xpacket-wrapped sidecar: what Adobe tools and darktable actually
+    /// write, as opposed to the single-line fixtures above.
+    const REAL_WORLD: &str = r#"<?xpacket begin="\u{feff}" id="W5M0MpCehiHzreSzNTczkc9d"?>
+<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="Adobe XMP Core 5.6-c145">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmp:Rating="2"
+   xmp:CreatorTool="Adobe Photoshop Lightroom">
+   <dc:subject>
+    <rdf:Bag>
+     <rdf:li>holiday</rdf:li>
+     <rdf:li>beach</rdf:li>
+    </rdf:Bag>
+   </dc:subject>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>
+<?xpacket end="w"?>"#;
+
+    /// Rating written as a child element rather than an attribute, with nothing else in it.
+    const ELEMENT_FORM_ONLY: &str = concat!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>"#,
+        r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">"#,
+        r#"<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">"#,
+        r#"<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/">"#,
+        r#"<xmp:Rating>3</xmp:Rating>"#,
+        r#"</rdf:Description></rdf:RDF></x:xmpmeta>"#,
+    );
+
+    #[test]
+    fn drains_an_element_form_sidecar_that_holds_only_a_rating() {
+        // Every other drain test uses the attribute form, but the element form is equally
+        // valid XMP and must reach the same verdict.
+        assert_eq!(parse_rating(ELEMENT_FORM_ONLY), Some(3));
+        assert!(
+            merge_rating(ELEMENT_FORM_ONLY, 0).unwrap().is_none(),
+            "a rating-only sidecar should go, whichever form the rating took"
+        );
+    }
+
+    #[test]
+    fn keeps_a_sidecar_whose_only_other_content_is_another_xmp_property() {
+        // xmp:CreatorTool belongs to someone else even though it shares ptui's namespace.
+        let xml = MINIMAL.replace(
+            r#"xmp:Rating="5""#,
+            r#"xmp:Rating="5" xmp:CreatorTool="darktable""#,
+        );
+
+        let drained = merge_rating(&xml, 0)
+            .unwrap()
+            .expect("must not delete a sidecar holding another tool's property");
+        assert_eq!(parse_rating(&drained), None);
+        assert!(drained.contains("darktable"));
+    }
+
+    #[test]
+    fn drains_a_real_world_sidecar_without_touching_anyone_elses_data() {
+        let drained = merge_rating(REAL_WORLD, 0)
+            .unwrap()
+            .expect("a sidecar with keywords and a creator tool must survive");
+
+        assert_eq!(parse_rating(&drained), None, "the rating is gone");
+        assert!(drained.contains("holiday"), "keywords survive");
+        assert!(drained.contains("beach"));
+        assert!(drained.contains("Adobe Photoshop Lightroom"));
+        assert!(drained.contains("xpacket"), "the packet wrapper survives");
+        assert!(drained.contains("Adobe XMP Core 5.6-c145"));
+    }
+
+    #[test]
+    fn merges_into_a_real_world_sidecar() {
+        let merged = merge_rating(REAL_WORLD, 5).unwrap().unwrap();
+
+        assert_eq!(parse_rating(&merged), Some(5));
+        assert!(merged.contains("holiday"));
+        assert!(merged.contains("Adobe Photoshop Lightroom"));
+        assert!(
+            merged.contains(r#"<?xpacket end="w"?>"#),
+            "trailing packet marker kept"
+        );
+    }
+
+    #[test]
+    fn a_rating_is_never_written_twice_into_one_document() {
+        // Real XMP often splits properties across several rdf:Description blocks. Adding a
+        // rating must not put one in the first block while another already sits in a later
+        // one, which would leave the file with two values for a single-valued property.
+        let xml = concat!(
+            r#"<x:xmpmeta xmlns:x="adobe:ns:meta/">"#,
+            r#"<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">"#,
+            r#"<rdf:Description rdf:about="" xmlns:dc="http://purl.org/dc/elements/1.1/""#,
+            r#" dc:creator="Someone"></rdf:Description>"#,
+            r#"<rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/""#,
+            r#" xmp:Rating="1"></rdf:Description>"#,
+            r#"</rdf:RDF></x:xmpmeta>"#,
+        );
+
+        let merged = merge_rating(xml, 4).unwrap().unwrap();
+
+        assert_eq!(
+            merged.matches("xmp:Rating").count(),
+            1,
+            "exactly one rating should remain, got:\n{}",
+            merged
+        );
+        assert_eq!(parse_rating(&merged), Some(4));
+        assert!(merged.contains(r#"dc:creator="Someone""#));
+    }
+
+    #[test]
+    fn clearing_a_rating_that_is_already_absent_is_harmless() {
+        let xml = MINIMAL.replace(r#" xmp:Rating="5""#, "");
+        assert!(
+            merge_rating(&xml, 0).unwrap().is_none(),
+            "nothing of anyone else's is in it, so it still goes"
+        );
+    }
+
+    #[test]
+    fn draining_then_rating_again_round_trips_on_disk() {
+        let temp = TempDir::new().unwrap();
+        let image = write(temp.path(), "a.png", "x");
+        let sidecar = temp.path().join("a.png.xmp");
+
+        set_rating(&image, 5, SidecarNaming::default()).unwrap();
+        assert!(sidecar.exists());
+
+        set_rating(&image, 0, SidecarNaming::default()).unwrap();
+        assert!(!sidecar.exists(), "drained sidecar removed");
+
+        // Rating again must rebuild it rather than fail on the missing file.
+        set_rating(&image, 2, SidecarNaming::default()).unwrap();
+        assert!(sidecar.exists());
+        assert_eq!(read_rating(&image), Some(2));
+    }
+
+    #[test]
+    fn draining_a_foreign_sidecar_on_disk_keeps_the_file() {
+        let temp = TempDir::new().unwrap();
+        let image = write(temp.path(), "a.png", "x");
+        let sidecar = write(temp.path(), "a.png.xmp", WITH_HISTORY);
+
+        set_rating(&image, 0, SidecarNaming::default()).unwrap();
+
+        assert!(
+            sidecar.exists(),
+            "a sidecar with an edit history must not be deleted"
+        );
+        let after = fs::read_to_string(&sidecar).unwrap();
+        assert!(after.contains("darktable:history"));
+        assert_eq!(read_rating(&image), None);
     }
 
     #[test]
