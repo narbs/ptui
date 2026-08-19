@@ -76,15 +76,27 @@ review and push the tap yourself:
     git commit -m "Update ptui to vX.Y.Z"
     git push
 
-Step 4 - macOS build (optional)
--------------------------------
+Step 4 - macOS build
+--------------------
 
 On a Mac:
 
     ./release-mac.sh
 
-Builds with `--features fast-jpeg` and produces `ptui-X.Y.Z-mac-x86_64.tar.gz` from the release
-binary. Distributing that tarball is a manual step.
+Builds with `--features fast-jpeg`, packs `ptui-X.Y.Z-mac-<arch>.tar.gz` from the release binary,
+and uploads it to the GitHub release for the version in `Cargo.toml`. The architecture comes from
+`uname -m`, so an Apple Silicon build is named `arm64` rather than being mislabelled `x86_64`.
+
+The script refuses to run anywhere but macOS, since it would otherwise pack a Linux binary under a
+macOS name and publish it.
+
+It needs the tag to be on GitHub already, which Step 1 does. If the release does not exist yet, or
+`gh` is missing or not logged in, the tarball is still built and the command to run later is
+printed - the upload is the only part that is skipped.
+
+    ./release-mac.sh --no-upload    # build and pack only
+
+Re-running after a rebuild replaces the uploaded asset rather than failing.
 
 After the release
 -----------------
