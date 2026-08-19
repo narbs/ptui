@@ -368,8 +368,9 @@ main() {
   else
     echo_info "Release v$new_version completed successfully!"
     echo_info "Pushed: branch, tag v$new_version, GitHub release (Linux binary), and AUR."
-    echo_warn "macOS binary is built separately. On a Mac, build and upload it:"
-    echo_warn "  gh release upload v$new_version ptui-$new_version-mac-x86_64.tar.gz --repo $REPO"
+    echo_warn "macOS binary is built separately. On a Mac, run:"
+    echo_warn "  ./release-mac.sh"
+    echo_warn "which builds it and uploads it to the v$new_version release."
   fi
 }
 
