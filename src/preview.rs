@@ -4,7 +4,7 @@ use crate::fast_image_loader::FastImageLoader;
 use crate::file_browser::FileItem;
 use crate::localization::Localization;
 use ansi_to_tui::IntoText;
-use base64::{engine::general_purpose, Engine};
+use base64::{Engine, engine::general_purpose};
 use image::DynamicImage;
 use ratatui::text::Text;
 use ratatui_image::picker::Picker;
@@ -128,7 +128,7 @@ impl PreviewManager {
         // Skip graphics detection during tests to avoid terminal access issues
         #[cfg(test)]
         {
-            return (TerminalGraphicsSupport::None, None);
+            (TerminalGraphicsSupport::None, None)
         }
 
         #[cfg(not(test))]
@@ -142,14 +142,12 @@ impl PreviewManager {
 
             // Skip if running under cargo test (integration tests)
             // Cargo test sets CARGO or the binary name contains "test"
-            if std::env::var("CARGO").is_ok() {
-                if let Ok(exe) = std::env::current_exe() {
-                    if let Some(name) = exe.file_name() {
-                        if name.to_string_lossy().contains("test") {
-                            return (TerminalGraphicsSupport::None, None);
-                        }
-                    }
-                }
+            if std::env::var("CARGO").is_ok()
+                && let Ok(exe) = std::env::current_exe()
+                && let Some(name) = exe.file_name()
+                && name.to_string_lossy().contains("test")
+            {
+                return (TerminalGraphicsSupport::None, None);
             }
         }
 
@@ -165,10 +163,7 @@ impl PreviewManager {
                     #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!("[GRAPHICS] Picker created successfully");
                     #[cfg(all(not(test), feature = "debug-output"))]
-                    eprintln!(
-                        "[GRAPHICS] Font size: {}x{}",
-                        font_size.0, font_size.1
-                    );
+                    eprintln!("[GRAPHICS] Font size: {}x{}", font_size.0, font_size.1);
                     #[cfg(all(not(test), feature = "debug-output"))]
                     eprintln!("[GRAPHICS] Detected protocol: {:?}", picker.protocol_type());
 
@@ -182,7 +177,9 @@ impl PreviewManager {
                         }
                         ProtocolType::Sixel => {
                             #[cfg(all(not(test), feature = "debug-output"))]
-                            eprintln!("[GRAPHICS] Sixel detected but not yet fully supported, using anyway");
+                            eprintln!(
+                                "[GRAPHICS] Sixel detected but not yet fully supported, using anyway"
+                            );
                             TerminalGraphicsSupport::Sixel
                         }
                         ProtocolType::Halfblocks => {
@@ -250,11 +247,7 @@ impl PreviewManager {
     }
 
     /// Encode image to Kitty escape sequence for direct transmission
-    fn encode_kitty_remote(
-        img: &DynamicImage,
-        display_width: u32,
-        display_height: u32,
-    ) -> String {
+    fn encode_kitty_remote(img: &DynamicImage, display_width: u32, display_height: u32) -> String {
         let rgba = img.to_rgba8();
         let raw = rgba.as_raw();
         let encoded = general_purpose::STANDARD.encode(raw);
@@ -299,11 +292,7 @@ impl PreviewManager {
 
     /// Print Kitty image at position
     #[allow(dead_code)]
-    pub fn print_kitty_image(
-        preview: &mut KittyPreview,
-        x: u16,
-        y: u16,
-    ) -> std::io::Result<()> {
+    pub fn print_kitty_image(preview: &mut KittyPreview, x: u16, y: u16) -> std::io::Result<()> {
         use std::io::stdout;
 
         let mut stdout = stdout();
@@ -509,19 +498,20 @@ impl PreviewManager {
                             let max_dim = self.graphical_max_dimension;
                             let img_aspect = original_w as f32 / original_h as f32;
 
-                            let (resize_width, resize_height) = if original_w > max_dim || original_h > max_dim {
-                                if img_aspect > 1.0 {
-                                    let w = max_dim.min(original_w);
-                                    let h = (w as f32 / img_aspect) as u32;
-                                    (w, h)
+                            let (resize_width, resize_height) =
+                                if original_w > max_dim || original_h > max_dim {
+                                    if img_aspect > 1.0 {
+                                        let w = max_dim.min(original_w);
+                                        let h = (w as f32 / img_aspect) as u32;
+                                        (w, h)
+                                    } else {
+                                        let h = max_dim.min(original_h);
+                                        let w = (h as f32 * img_aspect) as u32;
+                                        (w, h)
+                                    }
                                 } else {
-                                    let h = max_dim.min(original_h);
-                                    let w = (h as f32 * img_aspect) as u32;
-                                    (w, h)
-                                }
-                            } else {
-                                (original_w, original_h)
-                            };
+                                    (original_w, original_h)
+                                };
 
                             #[cfg(all(not(test), feature = "debug-output"))]
                             eprintln!(
@@ -530,15 +520,16 @@ impl PreviewManager {
                             );
 
                             // Resize if needed
-                            let final_img = if resize_width < original_w || resize_height < original_h {
-                                img.resize(
-                                    resize_width,
-                                    resize_height,
-                                    image::imageops::FilterType::Triangle,
-                                )
-                            } else {
-                                img
-                            };
+                            let final_img =
+                                if resize_width < original_w || resize_height < original_h {
+                                    img.resize(
+                                        resize_width,
+                                        resize_height,
+                                        image::imageops::FilterType::Triangle,
+                                    )
+                                } else {
+                                    img
+                                };
 
                             let img_w = final_img.width();
                             let img_h = final_img.height();
@@ -575,8 +566,11 @@ impl PreviewManager {
                                 };
 
                             // Use direct data method (more reliable across terminals)
-                            let escape_seq =
-                                Self::encode_kitty_remote(&final_img, display_width, display_height);
+                            let escape_seq = Self::encode_kitty_remote(
+                                &final_img,
+                                display_width,
+                                display_height,
+                            );
                             let kitty_preview = KittyPreview {
                                 img_width: img_w,
                                 img_height: img_h,
@@ -592,18 +586,22 @@ impl PreviewManager {
                             {
                                 let protocol_time = protocol_start.elapsed();
                                 eprintln!("[TIMING] Kitty encoding: {:?}", protocol_time);
-                                eprintln!("[TIMING] TOTAL preview generation: {:?}", total_start.elapsed());
+                                eprintln!(
+                                    "[TIMING] TOTAL preview generation: {:?}",
+                                    total_start.elapsed()
+                                );
                             }
 
                             // Return early with Kitty preview
-                            let result = PreviewContent::Kitty(Rc::new(RefCell::new(kitty_preview)));
+                            let result =
+                                PreviewContent::Kitty(Rc::new(RefCell::new(kitty_preview)));
 
                             // Cache and return
-                            if self.cache.len() >= self.max_cache_size {
-                                if let Some(oldest_key) = self.cache_order.first().cloned() {
-                                    self.cache.remove(&oldest_key);
-                                    self.cache_order.remove(0);
-                                }
+                            if self.cache.len() >= self.max_cache_size
+                                && let Some(oldest_key) = self.cache_order.first().cloned()
+                            {
+                                self.cache.remove(&oldest_key);
+                                self.cache_order.remove(0);
                             }
                             self.cache.insert(cache_key.clone(), result.clone());
                             self.cache_order.push(cache_key);
@@ -642,8 +640,7 @@ impl PreviewManager {
                                 let safe_original_h = original_h.max(1) as f32;
                                 let safe_target_height_px = target_height_px.max(1) as f32;
                                 let img_aspect = original_w as f32 / safe_original_h;
-                                let target_aspect =
-                                    target_width_px as f32 / safe_target_height_px;
+                                let target_aspect = target_width_px as f32 / safe_target_height_px;
 
                                 let (resize_width, resize_height) = if img_aspect > target_aspect {
                                     // Image is wider - fit to width
@@ -762,13 +759,13 @@ impl PreviewManager {
         };
 
         // LRU cache eviction: remove oldest entry if cache is full
-        if self.cache.len() >= self.max_cache_size {
-            if let Some(oldest_key) = self.cache_order.first().cloned() {
-                self.cache.remove(&oldest_key);
-                self.cache_order.remove(0);
-                #[cfg(all(not(test), feature = "debug-output"))]
-                eprintln!("[CACHE] Evicted oldest entry: {}", oldest_key);
-            }
+        if self.cache.len() >= self.max_cache_size
+            && let Some(oldest_key) = self.cache_order.first().cloned()
+        {
+            self.cache.remove(&oldest_key);
+            self.cache_order.remove(0);
+            #[cfg(all(not(test), feature = "debug-output"))]
+            eprintln!("[CACHE] Evicted oldest entry: {}", oldest_key);
         }
 
         self.cache.insert(cache_key.clone(), result.clone());
@@ -1034,7 +1031,9 @@ mod tests {
         assert_eq!(manager.debug_info, localization.get("directory_selected"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview for directory"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                panic!("Expected text preview for directory")
+            }
         }
     }
 
@@ -1061,7 +1060,9 @@ mod tests {
         assert!(manager.debug_info.contains("test.txt"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview for text file"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                panic!("Expected text preview for text file")
+            }
         }
     }
 
@@ -1087,7 +1088,9 @@ mod tests {
         assert!(manager.debug_info.contains("test.ascii"));
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview for ascii file"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                panic!("Expected text preview for ascii file")
+            }
         }
     }
 
@@ -1106,7 +1109,9 @@ mod tests {
         );
         match preview {
             PreviewContent::Text(text) => assert!(!text.lines.is_empty()),
-            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview for unsupported file"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                panic!("Expected text preview for unsupported file")
+            }
         }
     }
 
@@ -1212,7 +1217,9 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                panic!("Expected text preview")
+            }
         };
 
         // Test scrolling with offset
@@ -1229,7 +1236,9 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                panic!("Expected text preview")
+            }
         };
 
         // The first preview should start with "Line 0"
@@ -1277,7 +1286,9 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
                 .join("\n"),
-            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => panic!("Expected text preview"),
+            PreviewContent::Graphical(_) | PreviewContent::Kitty(_) => {
+                panic!("Expected text preview")
+            }
         };
 
         // Should show the limit message since we have more than 10000 lines

@@ -300,10 +300,9 @@ impl UIRenderer {
                     let font_height = (graphical_borrow.font_size.1 as u32).max(1);
 
                     // Calculate how many cells the resized image needs
-                    let needed_width_cells =
-                        ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
+                    let needed_width_cells = graphical_borrow.img_width.div_ceil(font_width) as u16;
                     let needed_height_cells =
-                        ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
+                        graphical_borrow.img_height.div_ceil(font_height) as u16;
 
                     // Clamp to available area
                     let width = needed_width_cells.min(inner_area.width);
@@ -346,7 +345,8 @@ impl UIRenderer {
 
                     // Calculate width needed to display at full height while preserving aspect ratio
                     // Account for character aspect ratio (cells are taller than wide in pixels)
-                    let display_width = (inner_area.height as f32 * img_aspect * char_aspect) as u16;
+                    let display_width =
+                        (inner_area.height as f32 * img_aspect * char_aspect) as u16;
 
                     let (width, height) = if display_width <= inner_area.width {
                         // Image fits horizontally at full height
@@ -356,7 +356,8 @@ impl UIRenderer {
                         // Guard against division by zero
                         let safe_aspect = img_aspect.max(0.001);
                         let safe_char_aspect = char_aspect.max(0.001);
-                        let display_height = (inner_area.width as f32 / safe_aspect / safe_char_aspect) as u16;
+                        let display_height =
+                            (inner_area.width as f32 / safe_aspect / safe_char_aspect) as u16;
                         (inner_area.width, display_height.min(inner_area.height))
                     };
 
@@ -518,60 +519,61 @@ impl UIRenderer {
 
                 // Calculate centered area
                 use crate::preview::TerminalGraphicsSupport;
-                let centered_area =
-                    if graphical_borrow.protocol_type == TerminalGraphicsSupport::Iterm2 {
-                        // iTerm2: Calculate exact cell dimensions
-                        // Guard against division by zero with fallback values
-                        let font_width = (graphical_borrow.font_size.0 as u32).max(1);
-                        let font_height = (graphical_borrow.font_size.1 as u32).max(1);
+                let centered_area = if graphical_borrow.protocol_type
+                    == TerminalGraphicsSupport::Iterm2
+                {
+                    // iTerm2: Calculate exact cell dimensions
+                    // Guard against division by zero with fallback values
+                    let font_width = (graphical_borrow.font_size.0 as u32).max(1);
+                    let font_height = (graphical_borrow.font_size.1 as u32).max(1);
 
-                        let needed_width_cells =
-                            ((graphical_borrow.img_width + font_width - 1) / font_width) as u16;
-                        let needed_height_cells =
-                            ((graphical_borrow.img_height + font_height - 1) / font_height) as u16;
+                    let needed_width_cells = graphical_borrow.img_width.div_ceil(font_width) as u16;
+                    let needed_height_cells =
+                        graphical_borrow.img_height.div_ceil(font_height) as u16;
 
-                        let width = needed_width_cells.min(chunks[0].width);
-                        let height = needed_height_cells.min(chunks[0].height);
+                    let width = needed_width_cells.min(chunks[0].width);
+                    let height = needed_height_cells.min(chunks[0].height);
 
-                        let x_offset = (chunks[0].width.saturating_sub(width)) / 2;
-                        let y_offset = (chunks[0].height.saturating_sub(height)) / 2;
+                    let x_offset = (chunks[0].width.saturating_sub(width)) / 2;
+                    let y_offset = (chunks[0].height.saturating_sub(height)) / 2;
 
-                        Rect {
-                            x: chunks[0].x + x_offset,
-                            y: chunks[0].y + y_offset,
-                            width,
-                            height,
-                        }
+                    Rect {
+                        x: chunks[0].x + x_offset,
+                        y: chunks[0].y + y_offset,
+                        width,
+                        height,
+                    }
+                } else {
+                    // Kitty/Ghostty: Fill vertical space, center horizontally
+                    // Guard against division by zero with fallback values
+                    let img_height = graphical_borrow.img_height.max(1) as f32;
+                    let img_aspect = graphical_borrow.img_width as f32 / img_height;
+                    let font_width = (graphical_borrow.font_size.0 as f32).max(1.0);
+                    let font_height = (graphical_borrow.font_size.1 as f32).max(1.0);
+                    let char_aspect = font_height / font_width;
+
+                    let display_width = (chunks[0].height as f32 * img_aspect * char_aspect) as u16;
+
+                    let (width, height) = if display_width <= chunks[0].width {
+                        (display_width, chunks[0].height)
                     } else {
-                        // Kitty/Ghostty: Fill vertical space, center horizontally
-                        // Guard against division by zero with fallback values
-                        let img_height = graphical_borrow.img_height.max(1) as f32;
-                        let img_aspect = graphical_borrow.img_width as f32 / img_height;
-                        let font_width = (graphical_borrow.font_size.0 as f32).max(1.0);
-                        let font_height = (graphical_borrow.font_size.1 as f32).max(1.0);
-                        let char_aspect = font_height / font_width;
-
-                        let display_width = (chunks[0].height as f32 * img_aspect * char_aspect) as u16;
-
-                        let (width, height) = if display_width <= chunks[0].width {
-                            (display_width, chunks[0].height)
-                        } else {
-                            // Guard against division by zero
-                            let safe_aspect = img_aspect.max(0.001);
-                            let safe_char_aspect = char_aspect.max(0.001);
-                            let display_height = (chunks[0].width as f32 / safe_aspect / safe_char_aspect) as u16;
-                            (chunks[0].width, display_height.min(chunks[0].height))
-                        };
-
-                        let x_offset = (chunks[0].width.saturating_sub(width)) / 2;
-
-                        Rect {
-                            x: chunks[0].x + x_offset,
-                            y: chunks[0].y,
-                            width,
-                            height,
-                        }
+                        // Guard against division by zero
+                        let safe_aspect = img_aspect.max(0.001);
+                        let safe_char_aspect = char_aspect.max(0.001);
+                        let display_height =
+                            (chunks[0].width as f32 / safe_aspect / safe_char_aspect) as u16;
+                        (chunks[0].width, display_height.min(chunks[0].height))
                     };
+
+                    let x_offset = (chunks[0].width.saturating_sub(width)) / 2;
+
+                    Rect {
+                        x: chunks[0].x + x_offset,
+                        y: chunks[0].y,
+                        width,
+                        height,
+                    }
+                };
 
                 let image_widget = StatefulImage::new().resize(Resize::Scale(None));
                 f.render_stateful_widget(
@@ -1121,7 +1123,10 @@ mod tests {
             .unwrap()
             .to_string();
         assert!(text.contains(&overwrite_word));
-        assert!(text.contains("/tmp/keepers"), "the destination stays visible");
+        assert!(
+            text.contains("/tmp/keepers"),
+            "the destination stays visible"
+        );
     }
 
     #[test]

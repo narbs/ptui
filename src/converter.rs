@@ -21,14 +21,15 @@ impl ChafaConverter {
     pub fn new(mut config: ChafaConfig) -> Self {
         // macOS Terminal.app doesn't support true color (24-bit), only 256 colors
         // Detect and adjust to prevent rendering artifacts
-        if let Ok(term_program) = std::env::var("TERM_PROGRAM") {
-            if term_program.contains("Apple_Terminal") && config.colors == "full" {
-                #[cfg(not(test))]
-                eprintln!(
-                    "[CHAFA] Detected macOS Terminal.app - switching from 'full' to '256' colors for compatibility"
-                );
-                config.colors = "256".to_string();
-            }
+        if let Ok(term_program) = std::env::var("TERM_PROGRAM")
+            && term_program.contains("Apple_Terminal")
+            && config.colors == "full"
+        {
+            #[cfg(not(test))]
+            eprintln!(
+                "[CHAFA] Detected macOS Terminal.app - switching from 'full' to '256' colors for compatibility"
+            );
+            config.colors = "256".to_string();
         }
 
         Self { config }
@@ -145,7 +146,7 @@ impl GraphicalConverter {
         #[cfg(test)]
         {
             let _ = fallback_config; // Suppress unused warning
-            return Err("GraphicalConverter cannot be created during tests".to_string());
+            Err("GraphicalConverter cannot be created during tests".to_string())
         }
 
         #[cfg(not(test))]
@@ -203,7 +204,8 @@ pub fn create_converter(config: &PTuiConfig) -> Box<dyn AsciiConverter> {
         "graphical" => {
             match GraphicalConverter::new(config.converter.chafa.clone()) {
                 Ok(converter) => {
-                    #[cfg_attr(all(test, feature = "debug-output"), allow(dead_code))]
+                    // The attribute that used to sit here applied `allow(dead_code)` to a
+                    // macro invocation, where it does nothing but raise a warning of its own.
                     eprintln!(
                         "Using graphical mode with protocol: {:?}",
                         converter.get_protocol_type()

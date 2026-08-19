@@ -140,12 +140,16 @@ impl FileItem {
             let mut buffer = [0u8; CONTENT_DETECTION_BUFFER_SIZE];
             if let Ok(bytes_read) = file.read(&mut buffer) {
                 let sample = &buffer[..bytes_read];
-                match inspect(sample) {
-                    ContentType::UTF_8 | ContentType::UTF_8_BOM => true,
-                    ContentType::UTF_16LE | ContentType::UTF_16BE => true,
-                    ContentType::UTF_32LE | ContentType::UTF_32BE => true,
-                    _ => false,
-                }
+                // Any Unicode encoding counts as text, whatever its width.
+                matches!(
+                    inspect(sample),
+                    ContentType::UTF_8
+                        | ContentType::UTF_8_BOM
+                        | ContentType::UTF_16LE
+                        | ContentType::UTF_16BE
+                        | ContentType::UTF_32LE
+                        | ContentType::UTF_32BE
+                )
             } else {
                 false
             }
@@ -240,12 +244,8 @@ impl FileBrowser {
             } else {
                 // Both are directories or both are files
                 match self.sort_mode {
-                    SortMode::NameAscending => {
-                        a.name.to_lowercase().cmp(&b.name.to_lowercase())
-                    }
-                    SortMode::NameDescending => {
-                        b.name.to_lowercase().cmp(&a.name.to_lowercase())
-                    }
+                    SortMode::NameAscending => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+                    SortMode::NameDescending => b.name.to_lowercase().cmp(&a.name.to_lowercase()),
                     SortMode::DateNewestFirst => b.modified.cmp(&a.modified), // Newest first
                     SortMode::DateOldestFirst => a.modified.cmp(&b.modified), // Oldest first
                 }
@@ -493,10 +493,10 @@ impl FileBrowser {
 
             // Restore the previously selected index if available and matches, but ensure it's valid
             let mut restored_index = 0;
-            if let Some(index) = restored_selection {
-                if index < self.files.len() {
-                    restored_index = index;
-                }
+            if let Some(index) = restored_selection
+                && index < self.files.len()
+            {
+                restored_index = index;
             }
 
             self.selected_index = restored_index;

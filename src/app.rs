@@ -1128,7 +1128,7 @@ impl ChafaTui {
                 preview_to_render,
                 &self.localization,
                 self.ascii_logo.as_ref(),
-                self.is_text_file
+                self.is_text_file,
             );
 
             UIRenderer::render_debug_pane(
@@ -1274,14 +1274,9 @@ impl ChafaTui {
                     (image_area.x + x_offset, image_area.y + y_offset, w, h)
                 } else {
                     // Normal mode: use preview area from layout
-                    let (_, preview_area, _) =
-                        self.ui_layout
-                            .calculate_layout(ratatui::layout::Rect::new(
-                                0,
-                                0,
-                                self.terminal_width,
-                                self.terminal_height,
-                            ));
+                    let (_, preview_area, _) = self.ui_layout.calculate_layout(
+                        ratatui::layout::Rect::new(0, 0, self.terminal_width, self.terminal_height),
+                    );
 
                     // Account for border
                     let inner_area = ratatui::layout::Rect::new(
@@ -1317,9 +1312,9 @@ impl ChafaTui {
                 kitty.display_height = height as u32;
 
                 // Render the Kitty image (now AFTER ratatui has flushed)
-                if let Err(e) =
-                    crate::preview::PreviewManager::print_kitty_image(&mut kitty, render_x, render_y)
-                {
+                if let Err(e) = crate::preview::PreviewManager::print_kitty_image(
+                    &mut kitty, render_x, render_y,
+                ) {
                     eprintln!("[KITTY] Post-draw render error: {}", e);
                 }
             }
