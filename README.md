@@ -101,8 +101,9 @@ machine. Neither extended attributes nor a private database can do that.
 
 The trade-off is that ptui creates files in your image folders, so the first time you rate
 something in a folder it asks, and remembers your answer for that folder. Answer `n` and
-ratings for that folder are kept privately in ptui's own state file instead, where they
-work but do not sync or show up anywhere else. To skip the question, set `stars.sidecars`
+ratings for that folder are kept privately in `~/.local/share/ptui/state.json` instead
+(on a Mac, under `$HOME/Library/Application Support`), where they work but do not sync or
+show up anywhere else. To skip the question, set `stars.sidecars`
 in the config to `"always"` or `"never"`:
 
 ```json
