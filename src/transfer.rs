@@ -1,3 +1,4 @@
+use crate::ratings;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::error::Error;
 use std::fmt;
@@ -351,6 +352,10 @@ pub fn validate_destination(dest: &Path, source: &Path) -> Result<(), TransferEr
 }
 
 /// Copy or move `source` into `dest_dir`, returning the resulting path.
+///
+/// Any XMP sidecar travels with the file. Filing an image away is exactly when a user is
+/// most likely to be relying on its rating, so leaving the sidecar behind would lose the
+/// rating at the worst moment.
 pub fn perform(
     mode: TransferMode,
     source: &Path,
@@ -374,6 +379,10 @@ pub fn perform(
             }
         }
     }
+
+    // The image is already safely transferred, so a sidecar that cannot be written (a
+    // read-only destination, say) costs a rating but must not fail the transfer.
+    let _ = ratings::transfer_sidecar(source, &target, matches!(mode, TransferMode::Move));
 
     Ok(target)
 }

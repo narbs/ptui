@@ -119,12 +119,48 @@ impl Default for SlideshowTransitionConfig {
     }
 }
 
+/// How ptui should treat XMP sidecar files.
+///
+/// Sidecars are the only rating store that syncs and that other photo tools can read, but
+/// they put new files in the user's folders, so the default is to ask once per folder.
+#[derive(Serialize, Debug, Clone, Deserialize, PartialEq)]
+pub struct StarsConfig {
+    /// "ask" (once per folder), "always", or "never".
+    #[serde(default = "default_sidecar_mode")]
+    pub sidecars: String,
+}
+
+fn default_sidecar_mode() -> String {
+    "ask".to_string()
+}
+
+impl Default for StarsConfig {
+    fn default() -> Self {
+        Self {
+            sidecars: default_sidecar_mode(),
+        }
+    }
+}
+
+impl StarsConfig {
+    pub fn never_writes_sidecars(&self) -> bool {
+        self.sidecars.eq_ignore_ascii_case("never")
+    }
+
+    pub fn always_writes_sidecars(&self) -> bool {
+        self.sidecars.eq_ignore_ascii_case("always")
+    }
+}
+
 #[derive(Serialize, Debug, Clone, Deserialize)]
 pub struct PTuiConfig {
     pub converter: ConverterConfig,
     pub locale: Option<String>,
     pub slideshow_delay_ms: Option<u64>,
     pub slideshow_transitions: Option<SlideshowTransitionConfig>,
+    /// Star rating behaviour. Optional so configs written before the feature still load.
+    #[serde(default)]
+    pub stars: Option<StarsConfig>,
     // Keep the old chafa field for backward compatibility
     #[serde(skip_serializing_if = "Option::is_none")]
     pub chafa: Option<ChafaConfig>,
@@ -137,6 +173,7 @@ impl Default for PTuiConfig {
             locale: Some(DEFAULT_LOCALE.to_string()),
             slideshow_delay_ms: Some(2000), // Default 2 seconds
             slideshow_transitions: Some(SlideshowTransitionConfig::default()),
+            stars: Some(StarsConfig::default()),
             chafa: None, // Deprecated, use converter.chafa instead
         }
     }
@@ -193,6 +230,10 @@ impl PTuiConfig {
 
     pub fn get_slideshow_transitions(&self) -> SlideshowTransitionConfig {
         self.slideshow_transitions.clone().unwrap_or_default()
+    }
+
+    pub fn get_stars(&self) -> StarsConfig {
+        self.stars.clone().unwrap_or_default()
     }
 
     pub fn get_config_path() -> Result<PathBuf, Box<dyn Error>> {
@@ -399,6 +440,7 @@ mod tests {
             locale: Some("de".to_string()),
             slideshow_delay_ms: Some(3000),
             slideshow_transitions: Some(SlideshowTransitionConfig::default()),
+            stars: Some(StarsConfig::default()),
             chafa: None,
         };
 

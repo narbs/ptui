@@ -126,6 +126,7 @@ fn test_configuration_persistence() {
         locale: Some("fr".to_string()),
         slideshow_delay_ms: Some(5000),
         slideshow_transitions: Some(config::SlideshowTransitionConfig::default()),
+        stars: Some(ptui::config::StarsConfig::default()),
         chafa: None,
     };
 

@@ -70,3 +70,13 @@ transfer_copied = コピーしました
 transfer_moved = 移動しました
 transfer_failed = 転送に失敗しました
 cannot_transfer_directory = フォルダはコピーまたは移動できません
+
+keys_rating = 0-5: 現在のファイルを評価 (0 で解除)、*: 5 で評価
+cannot_rate_directory = ディレクトリは評価できません
+rating_set = 評価 {$stars}
+rating_cleared = 評価を解除しました
+rating_sidecar_failed = サイドカーファイルを書き込めません。評価は ptui のみに保存しました
+sidecar_consent_title = サイドカーファイルを作成しますか？
+sidecar_consent_prompt = ptui はこのフォルダーに {$file} を作成します。
+sidecar_consent_explanation = 評価は XMP サイドカーファイルに保存されるため、画像と一緒に同期され、他の写真ソフトからも読み取れます。
+sidecar_consent_instructions = 'y' 許可、'n' ptui のみに保存、Esc キャンセル

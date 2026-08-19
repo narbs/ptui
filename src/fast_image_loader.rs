@@ -3,6 +3,26 @@ use image::DynamicImage;
 
 pub struct FastImageLoader;
 
+/// How much to shrink a JPEG by while decoding it, as the denominator of a fraction.
+///
+/// turbojpeg can decode at 1, 1/2, 1/4 or 1/8 scale essentially for free, so the largest
+/// reduction that still leaves the image at or above the target is chosen.
+///
+/// Kept out of the decode path itself so it can be tested without a JPEG or the optional
+/// turbojpeg dependency. Only the turbojpeg path can act on it, so it is gated to match.
+#[cfg(any(feature = "fast-jpeg", test))]
+pub fn scale_divisor(max_original: usize, target_max_dimension: u32) -> u32 {
+    if max_original > (target_max_dimension * 8) as usize {
+        8
+    } else if max_original > (target_max_dimension * 4) as usize {
+        4
+    } else if max_original > (target_max_dimension * 2) as usize {
+        2
+    } else {
+        1
+    }
+}
+
 impl FastImageLoader {
     /// Load image with optimal strategy based on format and target size
     #[allow(unused_variables)]
@@ -96,14 +116,11 @@ impl FastImageLoader {
 
         // Calculate optimal scaling factor for turbojpeg
         // turbojpeg supports 1, 1/2, 1/4, 1/8 during decompression (INSTANT!)
-        let scaling_factor = if max_original > (target_max_dimension * 8) as usize {
-            ScalingFactor::ONE_EIGHTH // Decode at 1/8 size
-        } else if max_original > (target_max_dimension * 4) as usize {
-            ScalingFactor::ONE_QUARTER // Decode at 1/4 size
-        } else if max_original > (target_max_dimension * 2) as usize {
-            ScalingFactor::ONE_HALF // Decode at 1/2 size
-        } else {
-            ScalingFactor::ONE // Full size
+        let scaling_factor = match scale_divisor(max_original, target_max_dimension) {
+            8 => ScalingFactor::ONE_EIGHTH,
+            4 => ScalingFactor::ONE_QUARTER,
+            2 => ScalingFactor::ONE_HALF,
+            _ => ScalingFactor::ONE,
         };
 
         #[cfg(all(not(test), feature = "debug-output"))]
@@ -168,54 +185,48 @@ impl FastImageLoader {
 
 #[cfg(test)]
 mod tests {
+    use super::scale_divisor;
+
+    /// The previous version of this test inlined the comparisons with literal numbers, so it
+    /// asserted only that Rust can do arithmetic; it never touched the loader.
+    #[rstest::rstest]
+    // 4032 is over 512*4 (2048) but not over 512*8 (4096).
+    #[case(4032, 512, 4)]
+    // Exactly 512*4, and the comparison is strict, so it falls to the next step down.
+    #[case(2048, 512, 2)]
+    #[case(5000, 512, 8)]
+    // At or below the target, no reduction at all.
+    #[case(512, 512, 1)]
+    #[case(100, 512, 1)]
+    // Boundaries: strictly greater is required to step up.
+    #[case(1024, 512, 1)]
+    #[case(1025, 512, 2)]
+    #[case(4096, 512, 4)]
+    #[case(4097, 512, 8)]
+    fn picks_the_largest_free_reduction(
+        #[case] max_original: usize,
+        #[case] target: u32,
+        #[case] expected: u32,
+    ) {
+        assert_eq!(scale_divisor(max_original, target), expected);
+    }
+
     #[test]
-    fn test_scale_factor_calculation() {
-        // 4032px image, target 512px:
-        // Is 4032 > 512 * 8 (4096)? No
-        // Is 4032 > 512 * 4 (2048)? Yes -> Use 1/4 scale
-        assert_eq!(
-            4,
-            if 4032 > 512 * 8 {
-                8
-            } else if 4032 > 512 * 4 {
-                4
-            } else if 4032 > 512 * 2 {
-                2
-            } else {
-                1
-            }
-        );
+    fn never_reduces_below_the_target() {
+        // Decoding smaller than the target would lose detail the preview needs.
+        for max_original in [600usize, 1000, 1500, 3000, 6000, 12000] {
+            let target = 512u32;
+            let divisor = scale_divisor(max_original, target);
+            let decoded = max_original / divisor as usize;
 
-        // 2048px image, target 512px:
-        // Is 2048 > 512 * 8? No
-        // Is 2048 > 512 * 4 (2048)? No (not strictly greater)
-        // Is 2048 > 512 * 2 (1024)? Yes -> Use 1/2 scale
-        assert_eq!(
-            2,
-            if 2048 > 512 * 8 {
-                8
-            } else if 2048 > 512 * 4 {
-                4
-            } else if 2048 > 512 * 2 {
-                2
-            } else {
-                1
-            }
-        );
-
-        // 5000px image, target 512px: should use 1/8
-        // Is 5000 > 512 * 8 (4096)? Yes -> Use 1/8 scale
-        assert_eq!(
-            8,
-            if 5000 > 512 * 8 {
-                8
-            } else if 5000 > 512 * 4 {
-                4
-            } else if 5000 > 512 * 2 {
-                2
-            } else {
-                1
-            }
-        );
+            assert!(
+                decoded >= target as usize || divisor == 1,
+                "{}px reduced by 1/{} gives {}px, below the {}px target",
+                max_original,
+                divisor,
+                decoded,
+                target
+            );
+        }
     }
 }

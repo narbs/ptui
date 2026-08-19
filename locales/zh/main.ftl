@@ -70,3 +70,13 @@ transfer_copied = 已复制
 transfer_moved = 已移动
 transfer_failed = 传输失败
 cannot_transfer_directory = 无法复制或移动文件夹
+
+keys_rating = 0-5: 为当前文件评分（0 清除），*: 评为 5 星
+cannot_rate_directory = 无法为目录评分
+rating_set = 已评分 {$stars}
+rating_cleared = 已清除评分
+rating_sidecar_failed = 无法写入附属文件，评分仅保存在 ptui 中
+sidecar_consent_title = 创建附属文件？
+sidecar_consent_prompt = ptui 将在此文件夹中创建 {$file}。
+sidecar_consent_explanation = 评分保存在 XMP 附属文件中，因此会随图片一起同步，其他照片工具也能读取。
+sidecar_consent_instructions = 'y' 在此允许，'n' 仅保存在 ptui 中，Esc 取消

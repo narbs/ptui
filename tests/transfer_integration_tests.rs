@@ -2,7 +2,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ptui::file_browser::FileBrowser;
 use ptui::state::PTuiState;
 use ptui::transfer::{
-    self, Resolution, Stage, TransferAction, TransferDialog, TransferError, TransferMode, handle_key,
+    self, Resolution, Stage, TransferAction, TransferDialog, TransferError, TransferMode,
+    handle_key,
 };
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -214,7 +215,11 @@ fn test_selection_follows_the_copied_file_when_the_listing_shifts() {
 
     let mut browser = FileBrowser::new_with_dir(source_dir.path()).unwrap();
     browser.update_max_visible_files(10);
-    let selected = browser.files.iter().position(|f| f.name == "c.jpg").unwrap();
+    let selected = browser
+        .files
+        .iter()
+        .position(|f| f.name == "c.jpg")
+        .unwrap();
     browser.set_selected_index(selected);
 
     let fallback = browser.selection_fallback_names();
@@ -243,7 +248,11 @@ fn test_selection_follows_the_next_file_after_a_move_when_the_listing_shifts() {
 
     let mut browser = FileBrowser::new_with_dir(source_dir.path()).unwrap();
     browser.update_max_visible_files(10);
-    let selected = browser.files.iter().position(|f| f.name == "c.jpg").unwrap();
+    let selected = browser
+        .files
+        .iter()
+        .position(|f| f.name == "c.jpg")
+        .unwrap();
     browser.set_selected_index(selected);
 
     let fallback = browser.selection_fallback_names();

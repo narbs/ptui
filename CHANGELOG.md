@@ -1,6 +1,27 @@
 PTUI - Picture TUI - CHANGELOG
 ==============================
 
+Aug 18, 2026
+------------
+
+PTUI 2.4.0 released. Star ratings. Press 1 to 5 to rate the selected file, 0 to clear it, or * for
+five; the rating shows as a star and a number beside the file name. Ratings are written to XMP
+sidecar files using the standard xmp:Rating property, the same one darktable, digiKam, RawTherapee,
+Bridge and Lightroom read, so a rating made in ptui is visible in those programs and syncs with the
+image rather than being stranded on one machine. Because that means creating files in your image
+folders, ptui asks the first time you rate something in a folder and remembers the answer; declining
+keeps that folder's ratings in ptui's own state file instead. Set stars.sidecars in the config to
+"always" or "never" to skip the question entirely. Both sidecar naming conventions are read, and
+ptui writes whichever one a folder already uses. An existing sidecar is updated rather than
+rewritten, so an edit history left in one by another program survives being rated. Deleting a file
+deletes its sidecar, and copying or moving a file brings its sidecar along.
+
+The file list pane is wider to make room for the rating without shortening file names, and no
+longer narrows as the terminal grows: a cutoff at 120 columns used to drop its share from 15% to
+10%, so a 140-column terminal gave a narrower pane than a 120-column one. It now takes 12% of the
+width with a minimum of 21 columns, which keeps roughly a dozen characters of file name readable
+at any size.
+
 Aug 7, 2026
 -----------
 

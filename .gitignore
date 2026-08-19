@@ -24,3 +24,6 @@ images*
 CLAUDE.md
 AGENTS.md
 log.txt
+
+# Saved Claude Code session transcripts; release.sh refuses to run with untracked files
+20??-??-??-??????-*.txt
