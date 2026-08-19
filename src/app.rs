@@ -308,6 +308,14 @@ impl ChafaTui {
             KeyCode::Char('s') => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
+                let message_key = self.file_browser.sort_by_rating();
+                let message = self.localization.get(message_key);
+                self.preview_manager.set_message(message.to_string());
+                self.update_preview();
+            }
+            KeyCode::Char('i') => {
+                self.show_help_on_startup = false;
+                self.show_help_toggle = false;
                 self.save_ascii_file();
             }
             KeyCode::Char('x') => {

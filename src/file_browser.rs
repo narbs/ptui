@@ -27,6 +27,10 @@ pub enum SortMode {
     NameDescending,
     DateNewestFirst,
     DateOldestFirst,
+    /// Highest rating first, unrated files last.
+    RatingHighestFirst,
+    /// Unrated files first, then lowest rating upwards.
+    RatingLowestFirst,
 }
 
 #[derive(Debug, Clone)]
@@ -308,6 +312,17 @@ impl FileBrowser {
                     SortMode::NameDescending => b.name.to_lowercase().cmp(&a.name.to_lowercase()),
                     SortMode::DateNewestFirst => b.modified.cmp(&a.modified), // Newest first
                     SortMode::DateOldestFirst => a.modified.cmp(&b.modified), // Oldest first
+                    // Unrated files are rating 0, so they fall to the far end on their own.
+                    // Files of equal rating are ordered by name, which keeps the listing
+                    // predictable instead of leaving it to whatever the previous sort was.
+                    SortMode::RatingHighestFirst => b
+                        .rating
+                        .cmp(&a.rating)
+                        .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
+                    SortMode::RatingLowestFirst => a
+                        .rating
+                        .cmp(&b.rating)
+                        .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase())),
                 }
             }
         });
@@ -483,6 +498,38 @@ impl FileBrowser {
             _ => {
                 self.sort_mode = SortMode::DateNewestFirst; // Default to newest first when switching from name
                 "date_sort_newest_first"
+            }
+        };
+
+        self.sort_files();
+
+        // Find the file again and update selection
+        if let Some(selected_path) = selected_file {
+            self.find_and_select_file(&selected_path);
+        }
+
+        message_key
+    }
+
+    pub fn sort_by_rating(&mut self) -> &'static str {
+        // Remember the currently selected file
+        let selected_file = self.get_selected_file().map(|f| f.path.clone());
+
+        // Toggle between rating sorting modes and return appropriate message key
+        let message_key = match self.sort_mode {
+            SortMode::RatingHighestFirst => {
+                self.sort_mode = SortMode::RatingLowestFirst;
+                "rating_sort_lowest_first"
+            }
+            SortMode::RatingLowestFirst => {
+                self.sort_mode = SortMode::RatingHighestFirst;
+                "rating_sort_highest_first"
+            }
+            _ => {
+                // Best first when arriving from a name or date sort: the reason to sort by
+                // rating is almost always to see the best pictures.
+                self.sort_mode = SortMode::RatingHighestFirst;
+                "rating_sort_highest_first"
             }
         };
 
@@ -1491,5 +1538,133 @@ mod tests {
         // The sidecar is the shared record; the private store only fills the gaps.
         assert_eq!(rating("a.png"), 5);
         assert_eq!(rating("b.png"), 2);
+    }
+    fn rated_browser() -> FileBrowser {
+        // Ratings are applied directly rather than through sidecars: the sort is the
+        // subject here, not how the numbers got there.
+        let temp = tempfile::TempDir::new().unwrap();
+        for name in ["b.png", "a.png", "c.png", "d.png", "e.png"] {
+            std::fs::write(temp.path().join(name), "x").unwrap();
+        }
+        let mut browser = FileBrowser::new_with_dir(temp.path()).unwrap();
+        for file in &mut browser.files {
+            file.rating = match file.name.as_str() {
+                "a.png" => 5,
+                "b.png" => 3,
+                "c.png" => 3,
+                "d.png" => 1,
+                _ => 0,
+            };
+        }
+        browser
+    }
+
+    fn order(browser: &FileBrowser) -> Vec<(String, u8)> {
+        browser
+            .files
+            .iter()
+            .map(|f| (f.name.clone(), f.rating))
+            .collect()
+    }
+
+    #[test]
+    fn sorts_best_rated_first_with_unrated_last() {
+        let mut browser = rated_browser();
+        assert_eq!(browser.sort_by_rating(), "rating_sort_highest_first");
+
+        assert_eq!(
+            order(&browser),
+            vec![
+                ("a.png".to_string(), 5),
+                ("b.png".to_string(), 3),
+                ("c.png".to_string(), 3),
+                ("d.png".to_string(), 1),
+                ("e.png".to_string(), 0),
+            ],
+            "5 down to 1, then unrated; equal ratings by name"
+        );
+    }
+
+    #[test]
+    fn sorting_by_rating_again_reverses_it() {
+        let mut browser = rated_browser();
+        browser.sort_by_rating();
+        assert_eq!(browser.sort_by_rating(), "rating_sort_lowest_first");
+
+        assert_eq!(
+            order(&browser),
+            vec![
+                ("e.png".to_string(), 0),
+                ("d.png".to_string(), 1),
+                ("b.png".to_string(), 3),
+                ("c.png".to_string(), 3),
+                ("a.png".to_string(), 5),
+            ],
+            "unrated, then 1 up to 5; equal ratings still by name"
+        );
+
+        // And back again.
+        assert_eq!(browser.sort_by_rating(), "rating_sort_highest_first");
+        assert_eq!(browser.files[0].name, "a.png");
+    }
+
+    #[test]
+    fn arriving_from_another_sort_shows_the_best_first() {
+        // The reason to reach for a rating sort is almost always to see the good ones.
+        let mut browser = rated_browser();
+        browser.sort_by_name();
+        assert_eq!(browser.sort_by_rating(), "rating_sort_highest_first");
+        assert_eq!(browser.files[0].rating, 5);
+
+        browser.sort_by_date();
+        assert_eq!(browser.sort_by_rating(), "rating_sort_highest_first");
+        assert_eq!(browser.files[0].rating, 5);
+    }
+
+    #[test]
+    fn rating_sort_keeps_the_selection_on_the_same_file() {
+        let mut browser = rated_browser();
+        browser.sort_by_name();
+        let selected = browser.files[browser.selected_index].path.clone();
+
+        browser.sort_by_rating();
+
+        assert_eq!(
+            browser.files[browser.selected_index].path, selected,
+            "the highlighted file should not change under the user"
+        );
+    }
+
+    #[test]
+    fn directories_stay_above_rated_files() {
+        let temp = tempfile::TempDir::new().unwrap();
+        std::fs::create_dir(temp.path().join("zzz-folder")).unwrap();
+        std::fs::write(temp.path().join("a.png"), "x").unwrap();
+
+        let mut browser = FileBrowser::new_with_dir(temp.path()).unwrap();
+        for file in &mut browser.files {
+            if file.name == "a.png" {
+                file.rating = 5;
+            }
+        }
+        browser.sort_by_rating();
+
+        assert!(
+            browser.files[0].is_directory,
+            "directories come first regardless"
+        );
+        assert_eq!(browser.files[1].name, "a.png");
+    }
+
+    #[test]
+    fn switching_away_from_a_rating_sort_works() {
+        let mut browser = rated_browser();
+        browser.sort_by_rating();
+
+        assert_eq!(browser.sort_by_name(), "name_sort_ascending");
+        assert_eq!(browser.files[0].name, "a.png");
+
+        browser.sort_by_rating();
+        assert_eq!(browser.sort_by_date(), "date_sort_newest_first");
     }
 }

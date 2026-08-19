@@ -1,6 +1,16 @@
 PTUI - Picture TUI - CHANGELOG
 ==============================
 
+Aug 19, 2026
+------------
+
+PTUI 2.5.0 released. Sort by star rating with s. The first press puts the best first and unrated
+files last, and pressing it again reverses that so unrated files lead and the best come last; files
+sharing a rating are ordered by name. d and n still sort by date and name.
+
+Note that s previously saved an ASCII file. That has moved to i, on the other side of the keyboard,
+so the three sort keys now sit together on d, n and s.
+
 Aug 18, 2026
 ------------
 

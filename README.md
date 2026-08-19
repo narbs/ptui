@@ -27,7 +27,7 @@ Features
 - Open in file system browser (if available)
 - Delete file
 - Save picture to ascii
-- Sort by date asc/desc or name asc/desc
+- Sort by date asc/desc, name asc/desc, or star rating best-first/unrated-first
 - Star ratings stored as XMP sidecars, readable by darktable, digiKam and Lightroom
 - Dynamic reloading of configuration
 
@@ -78,9 +78,9 @@ Controls:
     x                 - Delete file
     c                 - Copy file to a folder
     m                 - Move file to a folder
-    s                 - Save file to ascii
+    i                 - Save file to ascii
     0-5 / *           - Rate the selected file (0 clears, * rates 5)
-    d, n              - Sort by date (toggle newest/oldest), n: Sort by name (toggle A-Z/Z-A)
+    d, n, s           - Sort by date (newest/oldest), name (A-Z/Z-A) or rating (best/unrated first)
     Home/End          - Home: Go to start, End: Go to end
     o                 - Open in system file browser (if available)
     q / Ctrl+C        - Quit
@@ -92,6 +92,10 @@ Star ratings
 ------------
 Press `1` to `5` to rate the selected file, `0` to clear the rating, or `*` as a shortcut
 for five. The rating shows as a star and a number in the file list.
+
+Press `s` to sort by rating. The first press puts the best first and unrated files last;
+pressing it again reverses that, so unrated files come first and the best last. `d` and `n`
+still sort by date and name, and files sharing a rating are ordered by name.
 
 Ratings are stored in XMP sidecar files - a small `.xmp` file next to the image, holding
 the standard `xmp:Rating` property. This is the same format darktable, digiKam,
