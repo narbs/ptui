@@ -76,7 +76,8 @@ pub struct ChafaTui {
 
 impl ChafaTui {
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        let config = PTuiConfig::load()?;
+        let loaded = PTuiConfig::load()?;
+        let config = loaded.config;
         Self::check_required_applications(&config)?;
 
         let locale = config.get_locale();
@@ -89,8 +90,15 @@ impl ChafaTui {
         let mut preview_manager = PreviewManager::new(config.clone());
         let transition_manager = TransitionManager::new(config.get_slideshow_transitions());
 
-        // Set initial ready message
-        preview_manager.debug_info = localization.get("ptui_ready");
+        // Set initial ready message, or say why the config on disk is not in use. The
+        // file is left alone in that case, so this message is the only sign of it.
+        preview_manager.debug_info = match &loaded.parse_error {
+            Some(error) => {
+                let args = fluent::fluent_args!["error" => error.as_str()];
+                localization.get_with_args("config_unreadable", Some(&args))
+            }
+            None => localization.get("ptui_ready"),
+        };
         let ascii_logo = Self::load_ascii_logo();
 
         let mut app = Self {
@@ -173,6 +181,14 @@ impl ChafaTui {
     }
 
     pub fn handle_key_event(&mut self, key: KeyEvent) -> Result<(), Box<dyn Error>> {
+        // Ctrl+C quits, ahead of the dialogs, because that is what it means in a terminal
+        // and a user reaching for it wants out rather than a cancelled field. Raw mode
+        // suppresses the signal, so it arrives here as an ordinary key. Without the guard
+        // it would match the plain 'c' arm below and open the copy dialog instead.
+        if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
+            return Err("Quit".into());
+        }
+
         // Handle delete confirmation dialog first if it's showing
         if self.show_delete_confirmation {
             self.handle_delete_confirmation(key)?;
@@ -192,6 +208,7 @@ impl ChafaTui {
         }
 
         match key.code {
+            // Ctrl+C is handled above, before the dialogs.
             KeyCode::Char('q') | KeyCode::Esc => return Err("Quit".into()),
             KeyCode::Down | KeyCode::Char('j') => {
                 self.show_help_on_startup = false;

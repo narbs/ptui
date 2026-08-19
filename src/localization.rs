@@ -200,6 +200,7 @@ mod tests {
             "keys_refresh_image",
             "keys_save_ascii",
             "keys_rating",
+            "config_unreadable",
             "rating_sort_highest_first",
             "rating_sort_lowest_first",
             "keys_delete_file",
@@ -235,6 +236,7 @@ mod tests {
             "cannot_rate_directory",
             "rating_cleared",
             "rating_sidecar_failed",
+            "config_unreadable",
             "rating_sort_highest_first",
             "rating_sort_lowest_first",
             "sidecar_consent_title",
@@ -269,6 +271,18 @@ mod tests {
         assert!(
             localization.get("keys_sort").contains('s'),
             "sort help should name s in {}",
+            locale
+        );
+        // German labels the key Strg, so match the shared shape rather than the word.
+        assert!(
+            localization.get("keys_page_navigation").contains("+F/"),
+            "page-jump help should name the Ctrl shortcut in {}",
+            locale
+        );
+        // Ctrl+C quits, so the help has to say so wherever it lists how to quit.
+        assert!(
+            localization.get("keys_quit").contains("+C"),
+            "quit help should name the Ctrl shortcut in {}",
             locale
         );
     }

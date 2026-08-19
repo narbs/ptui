@@ -35,8 +35,8 @@ Requirements
 ------------
 - chafa - For converting images to ANSI/terminal output
 - ImageMagick (identify command) - For image dimension detection
-- jp2a - for displaying images in jp2a text output
-- nasm (for building fast-jpeg)
+- jp2a - Optional, only needed if you select the jp2a converter
+- nasm - Only needed when building with the fast-jpeg feature
 
 Installation
 ------------
@@ -71,22 +71,29 @@ Usage
 Controls:
 ```
     Arrow Keys / j,k  - Navigate file list
+    Page Up/Page Down - Jump by a page
+    Ctrl+F / Ctrl+B   - Jump by a page (same as Page Up/Page Down)
+    f / b             - Jump forward/back by 10 files
+    Home / End        - Go to start / end of the list
     Enter             - Enter directory
     Backspace         - Go to parent directory
     [ / ]             - Resize preview window
-    space             - Start Slideshow (Arrows work here too)
+    r                 - Refresh the preview and re-read the rating
+    space             - Start slideshow (arrows work here too)
+    u / space         - Scroll a text file up / down (when a text file is selected)
     x                 - Delete file
     c                 - Copy file to a folder
     m                 - Move file to a folder
     i                 - Save file to ascii
     0-5 / *           - Rate the selected file (0 clears, * rates 5)
     d, n, s           - Sort by date (newest/oldest), name (A-Z/Z-A) or rating (best/unrated first)
-    Home/End          - Home: Go to start, End: Go to end
     o                 - Open in system file browser (if available)
-    q / Ctrl+C        - Quit
     TAB               - Cycle between converters
     ?                 - Help
+    q / Esc / Ctrl+C  - Quit
 ```
+
+Ctrl+C quits from anywhere, including while a dialog is open.
 
 Star ratings
 ------------
@@ -118,6 +125,9 @@ in the config to `"always"` or `"never"`:
 }
 ```
 
+Only the keys present in the file take effect; everything else uses its default, so a
+short configuration like the one above is perfectly valid.
+
 Both sidecar naming conventions are read:
 
 ```
@@ -134,7 +144,8 @@ An existing sidecar is never overwritten, only updated. Sidecars written by othe
 can hold a great deal more than a rating - darktable keeps an entire edit history in
 them - so ptui changes `xmp:Rating` and `xmp:MetadataDate` and leaves everything else
 exactly as it found it. Deleting a file deletes its sidecar too, and copying or moving a
-file takes its sidecar along.
+file takes its sidecar along. Ratings kept privately, in folders where you declined
+sidecars, follow a copy or move in the same way.
 
 Copying and moving files
 ------------------------
@@ -162,6 +173,15 @@ On a Mac the configuration file is created here: "$HOME/Library/Application Supp
 
 Edits refresh in the app automatically.
 
+Only the keys you set need to be present - anything missing takes its default. If the file
+cannot be parsed at all, ptui leaves it exactly as it is, runs on defaults for that session,
+and says so in the messages pane with the line and column of the problem, so a stray comma
+never costs you the file.
+
+`stars.sidecars` controls whether ratings are written as XMP sidecar files: `"ask"` (the
+default) prompts once per folder, `"always"` writes without asking, and `"never"` keeps
+every rating in ptui's own state file. See the star ratings section above.
+
 Example chafa configuration:
 
 ```json
@@ -188,6 +208,9 @@ Example chafa configuration:
     "enabled": false,
     "effect": "scattering",
     "frame_duration_ms": 50
+  },
+  "stars": {
+    "sidecars": "ask"
   }
 }
 ```
@@ -220,6 +243,9 @@ Example jp2a configuration with slide show transitions:
     "enabled": false,
     "effect": "scattering",
     "frame_duration_ms": 50
+  },
+  "stars": {
+    "sidecars": "ask"
   }
 }
 ```
