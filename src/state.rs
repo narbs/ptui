@@ -147,6 +147,23 @@ impl PTuiState {
         }
     }
 
+    /// Carry a privately stored rating to a file's new location.
+    ///
+    /// The store is keyed by absolute path, so a rating kept here has to follow the file the
+    /// way a sidecar does. Without this a move leaves the rating stranded under a path that
+    /// no longer exists and the file reads as unrated, and a copy silently loses a rating
+    /// that the sidecar backend would have carried across.
+    pub fn transfer_rating(&mut self, from: &Path, to: &Path, move_it: bool) {
+        let Some(rating) = self.fallback_rating(from) else {
+            return;
+        };
+
+        self.set_fallback_rating(to, rating);
+        if move_it {
+            self.set_fallback_rating(from, 0);
+        }
+    }
+
     /// Every privately stored rating for files directly inside `dir`.
     pub fn fallback_ratings_in(&self, dir: &Path) -> Vec<(String, u8)> {
         self.ratings
@@ -359,6 +376,50 @@ mod tests {
         assert_eq!(
             rating_destination(&stars("maybe"), None),
             RatingDestination::Ask
+        );
+    }
+    #[test]
+    fn moving_a_file_takes_its_private_rating_with_it() {
+        let mut state = PTuiState::default();
+        let from = Path::new("/photos/a.jpg");
+        let to = Path::new("/keepers/a.jpg");
+        state.set_fallback_rating(from, 4);
+
+        state.transfer_rating(from, to, true);
+
+        assert_eq!(
+            state.fallback_rating(to),
+            Some(4),
+            "rating followed the file"
+        );
+        assert_eq!(
+            state.fallback_rating(from),
+            None,
+            "nothing left stranded under the old path"
+        );
+    }
+
+    #[test]
+    fn copying_a_file_rates_the_copy_and_keeps_the_original() {
+        let mut state = PTuiState::default();
+        let from = Path::new("/photos/a.jpg");
+        let to = Path::new("/elsewhere/a.jpg");
+        state.set_fallback_rating(from, 2);
+
+        state.transfer_rating(from, to, false);
+
+        assert_eq!(state.fallback_rating(to), Some(2));
+        assert_eq!(state.fallback_rating(from), Some(2));
+    }
+
+    #[test]
+    fn transferring_an_unrated_file_stores_nothing() {
+        let mut state = PTuiState::default();
+        state.transfer_rating(Path::new("/photos/a.jpg"), Path::new("/b/a.jpg"), true);
+
+        assert!(
+            state.ratings.is_empty(),
+            "no phantom entry for an unrated file"
         );
     }
 }

@@ -752,6 +752,14 @@ impl ChafaTui {
         match transfer::perform(dialog.mode, &dialog.source, &dest) {
             Ok(target) => {
                 self.app_state.set_last_transfer_destination(&dest);
+                // A sidecar travels with the file inside transfer::perform. A rating held
+                // in the private store has to be moved here instead, or it would be left
+                // behind under a path that no longer exists.
+                self.app_state.transfer_rating(
+                    &dialog.source,
+                    &target,
+                    dialog.mode == TransferMode::Move,
+                );
                 self.app_state.save();
 
                 let message = format!(
