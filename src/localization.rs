@@ -271,6 +271,12 @@ mod tests {
             "sort help should name s in {}",
             locale
         );
+        // German labels the key Strg, so match the shared shape rather than the word.
+        assert!(
+            localization.get("keys_page_navigation").contains("+F/"),
+            "page-jump help should name the Ctrl shortcut in {}",
+            locale
+        );
     }
 
     #[rstest::rstest]

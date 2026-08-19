@@ -72,7 +72,7 @@ Controls:
 ```
     Arrow Keys / j,k  - Navigate file list
     Page Up/Page Down - Jump by a page
-    Ctrl+F / Ctrl+B   - Jump by a page
+    Ctrl+F / Ctrl+B   - Jump by a page (same as Page Up/Page Down)
     f / b             - Jump forward/back by 10 files
     Home / End        - Go to start / end of the list
     Enter             - Enter directory
