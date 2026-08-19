@@ -8,6 +8,11 @@ PTUI 2.5.0 released. Sort by star rating with s. The first press puts the best f
 files last, and pressing it again reverses that so unrated files lead and the best come last; files
 sharing a rating are ordered by name. d and n still sort by date and name.
 
+Saving an ASCII file now redraws the screen immediately. The new file appeared in the listing only
+after the next keypress, which made the save look like it had done nothing. The same applied to a
+few other messages, including the refusal to delete a directory and any failure reported while
+saving, copying or deleting.
+
 Note that s previously saved an ASCII file. That has moved to i, on the other side of the keyboard,
 so the three sort keys now sit together on d, n and s.
 

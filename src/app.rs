@@ -535,10 +535,7 @@ impl ChafaTui {
                 &self.localization,
             ) {
                 Ok(success_msg) => {
-                    // Update debug info with success message
-                    let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info =
-                        format!("{} | {}", current_debug, success_msg);
+                    self.append_message(success_msg);
 
                     // Refresh file list to show the new ASCII file. The saved file sorts
                     // into the listing and shifts the indices, so reselect by name to stay
@@ -546,50 +543,46 @@ impl ChafaTui {
                     let fallback_names = self.file_browser.selection_fallback_names();
 
                     if let Err(e) = self.file_browser.refresh_files() {
-                        let current_debug = self.preview_manager.get_debug_info();
-                        self.preview_manager.debug_info = format!(
-                            "{} | WARNING: Failed to refresh file list: {}",
-                            current_debug, e
-                        );
+                        self.append_message(format!("WARNING: Failed to refresh file list: {}", e));
                     }
                     self.apply_fallback_ratings();
                     if !self.file_browser.select_first_available(&fallback_names) {
                         self.clamp_selection();
                     }
+
+                    // The listing gained a file and the selection may have shifted, so the
+                    // preview has to be rebuilt for the pane to show the new state.
+                    self.update_preview();
                 }
                 Err(error_msg) => {
-                    // Update debug info with error message
-                    let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info =
-                        format!("{} | ERROR: {}", current_debug, error_msg);
+                    self.append_message(format!("ERROR: {}", error_msg));
                 }
             }
         } else {
-            // Update debug info when no file is selected
-            let current_debug = self.preview_manager.get_debug_info();
-            self.preview_manager.debug_info =
-                format!("{} | ERROR: No file selected", current_debug);
+            self.append_message("ERROR: No file selected".to_string());
         }
     }
 
     fn show_delete_dialog(&mut self) {
-        if let Some(file) = self.file_browser.get_selected_file() {
-            if file.is_directory {
-                // Don't allow deleting directories
-                let current_debug = self.preview_manager.get_debug_info();
-                self.preview_manager.debug_info =
-                    format!("{} | ERROR: Cannot delete directories", current_debug);
-                return;
-            }
+        // Copied out before reporting anything, so the browser borrow does not outlive it.
+        let Some((name, is_directory)) = self
+            .file_browser
+            .get_selected_file()
+            .map(|f| (f.name.clone(), f.is_directory))
+        else {
+            self.append_message("ERROR: No file selected".to_string());
+            return;
+        };
 
-            self.show_delete_confirmation = true;
-            self.delete_target_file = Some(file.name.clone());
-            self.needs_redraw = true;
-        } else {
-            let current_debug = self.preview_manager.get_debug_info();
-            self.preview_manager.debug_info =
-                format!("{} | ERROR: No file selected", current_debug);
+        if is_directory {
+            // Don't allow deleting directories
+            self.append_message("ERROR: Cannot delete directories".to_string());
+            return;
         }
+
+        self.show_delete_confirmation = true;
+        self.delete_target_file = Some(name);
+        self.needs_redraw = true;
     }
 
     fn handle_delete_confirmation(&mut self, key: KeyEvent) -> Result<(), Box<dyn Error>> {
@@ -659,11 +652,7 @@ impl ChafaTui {
                     self.update_preview();
                 }
                 Err(e) => {
-                    let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info = format!(
-                        "{} | ERROR: Failed to delete {}: {}",
-                        current_debug, file_name, e
-                    );
+                    self.append_message(format!("ERROR: Failed to delete {}: {}", file_name, e));
                 }
             }
         }
@@ -678,9 +667,15 @@ impl ChafaTui {
             || self.pending_rating.is_some()
     }
 
+    /// Show a message in the debug pane.
+    ///
+    /// This sets the redraw flag, because the main loop only draws when something asks it
+    /// to: a message posted without one sits invisible until the user happens to press
+    /// another key, which reads as the action having done nothing.
     fn append_message(&mut self, message: String) {
         let current_debug = self.preview_manager.get_debug_info();
         self.preview_manager.debug_info = format!("{} | {}", current_debug, message);
+        self.needs_redraw = true;
     }
 
     fn show_transfer_dialog(&mut self, mode: TransferMode) {
@@ -820,47 +815,43 @@ impl ChafaTui {
     }
 
     fn open_in_system_browser(&mut self) {
-        if let Some(file) = self.file_browser.get_selected_file() {
-            let file_path = std::path::Path::new(&file.path);
-            let target_path = if file.is_directory {
-                // If it's a directory, open the directory itself
-                file_path
-            } else {
-                // If it's a file, open the parent directory and select the file
-                file_path.parent().unwrap_or(file_path)
-            };
-
-            let result = self.open_path_in_system_browser(
-                target_path,
-                if file.is_directory {
-                    None
-                } else {
-                    Some(file_path)
-                },
-            );
-
-            match result {
-                Ok(()) => {
-                    let message = if file.is_directory {
-                        self.localization.get("opened_directory_in_browser")
-                    } else {
-                        self.localization.get("opened_file_in_browser")
-                    };
-                    let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info =
-                        format!("{} | {}: {}", current_debug, message, file.name);
-                }
-                Err(e) => {
-                    let error_msg = self.localization.get("failed_to_open_in_browser");
-                    let current_debug = self.preview_manager.get_debug_info();
-                    self.preview_manager.debug_info =
-                        format!("{} | {}: {}", current_debug, error_msg, e);
-                }
-            }
-        } else {
+        // Copy out what is needed before reporting anything: the selected file borrows the
+        // browser, and append_message needs the whole of self.
+        let Some((path, name, is_directory)) = self
+            .file_browser
+            .get_selected_file()
+            .map(|f| (PathBuf::from(&f.path), f.name.clone(), f.is_directory))
+        else {
             let error_msg = self.localization.get("no_file_selected");
-            let current_debug = self.preview_manager.get_debug_info();
-            self.preview_manager.debug_info = format!("{} | {}", current_debug, error_msg);
+            self.append_message(error_msg);
+            return;
+        };
+
+        // A directory opens itself; a file opens its parent with the file selected.
+        let target_path = if is_directory {
+            path.as_path()
+        } else {
+            path.parent().unwrap_or(path.as_path())
+        };
+        let select = if is_directory {
+            None
+        } else {
+            Some(path.as_path())
+        };
+
+        match self.open_path_in_system_browser(target_path, select) {
+            Ok(()) => {
+                let message = self.localization.get(if is_directory {
+                    "opened_directory_in_browser"
+                } else {
+                    "opened_file_in_browser"
+                });
+                self.append_message(format!("{}: {}", message, name));
+            }
+            Err(e) => {
+                let error_msg = self.localization.get("failed_to_open_in_browser");
+                self.append_message(format!("{}: {}", error_msg, e));
+            }
         }
     }
 
