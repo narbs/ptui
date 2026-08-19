@@ -34,6 +34,7 @@ slideshow_image = 图像
 slideshow_press_any_key = 按任意键退出
 messages = 消息
 ptui_ready = PTUI 准备就绪...
+config_unreadable = 无法读取配置文件，文件未被修改；本次会话使用默认设置 ({$error})
 saved_to = 已保存至:
 delete_file_prompt = 删除文件 {$file}？
 delete_confirmation_instructions = 按 'y' 或 Enter 确认，按 'n' 或 Esc 取消

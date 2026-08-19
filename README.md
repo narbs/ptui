@@ -116,17 +116,18 @@ something in a folder it asks, and remembers your answer for that folder. Answer
 ratings for that folder are kept privately in `~/.local/share/ptui/state.json` instead
 (on a Mac, under `$HOME/Library/Application Support`), where they work but do not sync or
 show up anywhere else. To skip the question, set `stars.sidecars`
-in the config to `"always"` or `"never"` - this is the relevant part of the file, not a
-complete config, so edit the existing file rather than replacing it:
+in the config to `"always"` or `"never"`:
 
 ```json
+{
   "stars": {
     "sidecars": "ask"
   }
+}
 ```
 
-A configuration file that does not parse is replaced with the defaults, so a partial file
-loses the settings in it.
+Only the keys present in the file take effect; everything else uses its default, so a
+short configuration like the one above is perfectly valid.
 
 Both sidecar naming conventions are read:
 
@@ -172,6 +173,11 @@ On Linux, the configuration file is automatically created at ~/.config/ptui/ptui
 On a Mac the configuration file is created here: "$HOME/Library/Application Support/ptui/ptui.json"
 
 Edits refresh in the app automatically.
+
+Only the keys you set need to be present - anything missing takes its default. If the file
+cannot be parsed at all, ptui leaves it exactly as it is, runs on defaults for that session,
+and says so in the messages pane with the line and column of the problem, so a stray comma
+never costs you the file.
 
 `stars.sidecars` controls whether ratings are written as XMP sidecar files: `"ask"` (the
 default) prompts once per folder, `"always"` writes without asking, and `"never"` keeps

@@ -34,6 +34,7 @@ slideshow_image = Image
 slideshow_press_any_key = Press any key to exit
 messages = Messages
 ptui_ready = PTUI ready...
+config_unreadable = Configuration file could not be read and was left unchanged; using defaults for this session ({$error})
 saved_to = Saved to:
 delete_file_prompt = Delete file {$file}?
 delete_confirmation_instructions = Press 'y' or Enter to confirm, 'n' or Esc to cancel

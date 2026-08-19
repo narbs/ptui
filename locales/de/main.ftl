@@ -34,6 +34,7 @@ slideshow_image = Bild
 slideshow_press_any_key = Beliebige Taste zum Beenden drücken
 messages = Nachrichten
 ptui_ready = PTUI bereit...
+config_unreadable = Konfigurationsdatei konnte nicht gelesen werden und blieb unverändert; für diese Sitzung werden Standardwerte verwendet ({$error})
 saved_to = Gespeichert unter:
 delete_file_prompt = Datei {$file} löschen?
 delete_confirmation_instructions = Drücken Sie 'y' oder Enter zum Bestätigen, 'n' oder Esc zum Abbrechen

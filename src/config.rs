@@ -154,6 +154,9 @@ impl StarsConfig {
 
 #[derive(Serialize, Debug, Clone, Deserialize)]
 pub struct PTuiConfig {
+    /// Defaulted so a file that sets only some keys still loads. Unknown keys are already
+    /// ignored, so requiring every known one was the odd rule out.
+    #[serde(default)]
     pub converter: ConverterConfig,
     pub locale: Option<String>,
     pub slideshow_delay_ms: Option<u64>,
@@ -179,27 +182,71 @@ impl Default for PTuiConfig {
     }
 }
 
-impl PTuiConfig {
-    pub fn load() -> Result<Self, Box<dyn Error>> {
-        let config_dir = get_config_dir()?;
-        let config_path = config_dir.join("ptui").join("ptui.json");
+/// The outcome of loading the configuration.
+pub struct LoadedConfig {
+    pub config: PTuiConfig,
+    /// Set when a file exists but could not be parsed. The file is left untouched and these
+    /// defaults are used for the session, so this is the only sign the user gets.
+    pub parse_error: Option<String>,
+}
 
+impl LoadedConfig {
+    fn loaded(config: PTuiConfig) -> Self {
+        Self {
+            config,
+            parse_error: None,
+        }
+    }
+
+    fn unreadable(config: PTuiConfig, error: String) -> Self {
+        Self {
+            config,
+            parse_error: Some(error),
+        }
+    }
+}
+
+impl PTuiConfig {
+    /// A loaded configuration, and why it is not the one on disk if that is the case.
+    ///
+    /// The complaint is carried rather than printed because the locale it should be phrased
+    /// in comes from the very config being loaded, and because anything printed here is
+    /// wiped a moment later when the alternate screen opens.
+    pub fn load() -> Result<LoadedConfig, Box<dyn Error>> {
+        let config_path = Self::get_config_path()?;
+        Self::load_from(&config_path)
+    }
+
+    /// The loading logic, against an explicit path so it can be exercised without touching
+    /// the real configuration directory.
+    pub fn load_from(config_path: &Path) -> Result<LoadedConfig, Box<dyn Error>> {
         if config_path.exists() {
-            let contents = fs::read_to_string(&config_path)?;
-            if let Ok(mut config) = serde_json::from_str::<PTuiConfig>(&contents) {
-                // Handle backward compatibility: migrate old chafa config to new format
-                if let Some(old_chafa) = config.chafa.take() {
-                    config.converter.chafa = old_chafa;
-                    // Save updated config to migrate to new format
-                    let _ = Self::save_config(&config_path, &config);
+            let contents = fs::read_to_string(config_path)?;
+            match serde_json::from_str::<PTuiConfig>(&contents) {
+                Ok(mut config) => {
+                    // Handle backward compatibility: migrate old chafa config to new format
+                    if let Some(old_chafa) = config.chafa.take() {
+                        config.converter.chafa = old_chafa;
+                        // Save updated config to migrate to new format
+                        let _ = Self::save_config(config_path, &config);
+                    }
+                    #[cfg(not(test))]
+                    println!("Loaded config from: {:?}", config_path);
+                    return Ok(LoadedConfig::loaded(config));
                 }
-                #[cfg(not(test))]
-                println!("Loaded config from: {:?}", config_path);
-                return Ok(config);
+                Err(e) => {
+                    // Leave the file exactly as the user left it. Overwriting it with
+                    // defaults would discard settings they are part way through editing,
+                    // and the hot reload already refuses to touch a file it cannot parse;
+                    // starting up should not be the one path that destroys it.
+                    return Ok(LoadedConfig::unreadable(Self::default(), e.to_string()));
+                }
             }
         }
 
-        Self::create_default_config(&config_path)
+        Ok(LoadedConfig::loaded(Self::create_default_config(
+            config_path,
+        )?))
     }
 
     fn create_default_config(config_path: &Path) -> Result<Self, Box<dyn Error>> {
@@ -562,5 +609,96 @@ mod tests {
         assert_eq!(config.invert, invert);
         assert_eq!(config.dither, dither);
         assert_eq!(config.chars, chars);
+    }
+    #[test]
+    fn an_unparseable_config_is_left_on_disk_untouched() {
+        // Overwriting it would discard settings the user is part way through editing, and
+        // the hot reload already refuses to touch a file it cannot parse.
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("ptui.json");
+        let broken = r#"{"locale": "de",}"#; // trailing comma
+        fs::write(&path, broken).unwrap();
+
+        let loaded = PTuiConfig::load_from(&path).unwrap();
+
+        assert_eq!(
+            fs::read_to_string(&path).unwrap(),
+            broken,
+            "file must be untouched"
+        );
+        assert!(
+            loaded.parse_error.is_some(),
+            "the reason should be reported"
+        );
+        assert_eq!(
+            loaded.config.converter.selected, "chafa",
+            "defaults for the session"
+        );
+    }
+
+    #[test]
+    fn the_reported_error_says_where_the_problem_is() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("ptui.json");
+        fs::write(&path, "{\n  \"locale\": \"de\",\n}").unwrap();
+
+        let error = PTuiConfig::load_from(&path).unwrap().parse_error.unwrap();
+
+        assert!(
+            error.contains("line") && error.contains("column"),
+            "a user fixing the file needs the position, got: {}",
+            error
+        );
+    }
+
+    #[test]
+    fn a_config_setting_only_some_keys_still_loads() {
+        // Unknown keys are already ignored, so requiring every known one was inconsistent,
+        // and it made a documented fragment unsafe to copy.
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("ptui.json");
+        fs::write(&path, r#"{"stars": {"sidecars": "never"}}"#).unwrap();
+
+        let loaded = PTuiConfig::load_from(&path).unwrap();
+
+        assert!(loaded.parse_error.is_none());
+        assert_eq!(
+            loaded.config.get_stars().sidecars,
+            "never",
+            "the key set is honoured"
+        );
+        assert_eq!(
+            loaded.config.converter.selected, "chafa",
+            "the rest defaults"
+        );
+        assert_eq!(loaded.config.get_locale(), "en");
+    }
+
+    #[test]
+    fn a_missing_config_is_created_from_defaults() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("nested").join("ptui.json");
+
+        let loaded = PTuiConfig::load_from(&path).unwrap();
+
+        assert!(loaded.parse_error.is_none());
+        assert!(path.exists(), "a first run should leave a file to edit");
+        assert_eq!(loaded.config.converter.selected, "chafa");
+    }
+
+    #[test]
+    fn a_valid_config_is_loaded_as_written() {
+        let temp = TempDir::new().unwrap();
+        let path = temp.path().join("ptui.json");
+        let original = PTuiConfig {
+            locale: Some("ja".to_string()),
+            ..Default::default()
+        };
+        PTuiConfig::save_config(&path, &original).unwrap();
+
+        let loaded = PTuiConfig::load_from(&path).unwrap();
+
+        assert!(loaded.parse_error.is_none());
+        assert_eq!(loaded.config.get_locale(), "ja");
     }
 }

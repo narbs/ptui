@@ -34,6 +34,7 @@ slideshow_image = 画像
 slideshow_press_any_key = 任意のキーを押して終了
 messages = メッセージ
 ptui_ready = PTUI 準備完了...
+config_unreadable = 設定ファイルを読み込めませんでした。ファイルは変更していません。このセッションでは既定値を使用します ({$error})
 saved_to = 保存先:
 delete_file_prompt = ファイル {$file} を削除しますか？
 delete_confirmation_instructions = 'y'またはEnterで確認、'n'またはEscでキャンセル

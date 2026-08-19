@@ -76,7 +76,8 @@ pub struct ChafaTui {
 
 impl ChafaTui {
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        let config = PTuiConfig::load()?;
+        let loaded = PTuiConfig::load()?;
+        let config = loaded.config;
         Self::check_required_applications(&config)?;
 
         let locale = config.get_locale();
@@ -89,8 +90,15 @@ impl ChafaTui {
         let mut preview_manager = PreviewManager::new(config.clone());
         let transition_manager = TransitionManager::new(config.get_slideshow_transitions());
 
-        // Set initial ready message
-        preview_manager.debug_info = localization.get("ptui_ready");
+        // Set initial ready message, or say why the config on disk is not in use. The
+        // file is left alone in that case, so this message is the only sign of it.
+        preview_manager.debug_info = match &loaded.parse_error {
+            Some(error) => {
+                let args = fluent::fluent_args!["error" => error.as_str()];
+                localization.get_with_args("config_unreadable", Some(&args))
+            }
+            None => localization.get("ptui_ready"),
+        };
         let ascii_logo = Self::load_ascii_logo();
 
         let mut app = Self {

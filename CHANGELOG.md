@@ -4,6 +4,24 @@ PTUI - Picture TUI - CHANGELOG
 Aug 19, 2026
 ------------
 
+PTUI 2.5.1 released. A configuration file that cannot be parsed is no longer replaced with the
+defaults. ptui now leaves it exactly as it is, runs on defaults for that session, and reports the
+problem with its line and column in the messages pane, so a stray comma no longer costs you the
+settings in the file. Editing the file while ptui is running already behaved this way; only starting
+up did not.
+
+Configuration files may also now set only the keys they care about, with everything else taking its
+default. Unknown keys were already ignored, so requiring every known one was the odd rule out.
+
+Ctrl+F and Ctrl+B are named in the help. They have been bound for a long time but appeared nowhere
+in it. The README's list of controls has been brought back in line with the keys the app actually
+binds: it was missing Page Up, Ctrl+F/Ctrl+B, f/b, r, u and Esc, and it claimed Ctrl+C quits. It
+does not - c is the copy shortcut and takes no modifier, so Ctrl+C opens the copy dialog. Quit with
+q or Esc.
+
+Aug 19, 2026
+------------
+
 PTUI 2.5.0 released. Sort by star rating with s. The first press puts the best first and unrated
 files last, and pressing it again reverses that so unrated files lead and the best come last; files
 sharing a rating are ordered by name. d and n still sort by date and name.

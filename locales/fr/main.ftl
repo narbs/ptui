@@ -34,6 +34,7 @@ slideshow_image = Image
 slideshow_press_any_key = Appuyez sur n'importe quelle touche pour quitter
 messages = Messages
 ptui_ready = PTUI prêt...
+config_unreadable = Le fichier de configuration n'a pas pu être lu et n'a pas été modifié ; les valeurs par défaut sont utilisées pour cette session ({$error})
 saved_to = Sauvegardé dans :
 delete_file_prompt = Supprimer le fichier {$file} ?
 delete_confirmation_instructions = Appuyez sur 'y' ou Entrée pour confirmer, 'n' ou Échap pour annuler
