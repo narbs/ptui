@@ -6,10 +6,10 @@ Oct 2, 2026
 
 https://github.com/narbs/ptui
 
-PTUI v2.6.1 is released. A terminal image viewer with a file browser and live previews.
+PTUI v2.7.0 is released. A terminal image viewer with a file browser and live previews.
 See CHANGELOG.md for the full history of changes.
 
-Highlights since v1.0:
+Highlights:
 
 - Graphical previews with the kitty and iTerm2 protocols (Ghostty, kitty, iTerm2), alongside
   chafa and jp2a, switched at any time with TAB
@@ -17,7 +17,7 @@ Highlights since v1.0:
   and sorting by rating with s
 - Copy (c) and move (m) files to a remembered or standard folder, taking ratings along
 - r re-reads the file list, preview and rating, keeping the selection
-- A configuration file that cannot be parsed is left untouched and reported, never replaced
+- A malformed configuration file that cannot be parsed is left untouched and reported, never replaced
 - Configuration files only need the keys they change; see example.config.ptui.json
 
 Features:
