@@ -78,7 +78,7 @@ Controls:
     Enter             - Enter directory
     Backspace         - Go to parent directory
     [ / ]             - Resize preview window
-    r                 - Refresh the preview and re-read the rating
+    r                 - Re-read the file list, preview and rating, keeping the selection
     space             - Start slideshow (arrows work here too)
     u / space         - Scroll a text file up / down (when a text file is selected)
     x                 - Delete file

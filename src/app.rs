@@ -511,6 +511,12 @@ impl ChafaTui {
     }
 
     fn refresh_current_preview(&mut self) {
+        // A slideshow walks its own list of image indices, which a re-read listing would
+        // invalidate, so there only the image itself is refreshed.
+        if !self.is_slideshow_mode {
+            self.refresh_file_list();
+        }
+
         // Re-read the rating from disk as well as the image. Another tool may have changed
         // it in the meantime -- a sidecar is a shared record, and ptui is not its only writer.
         self.reload_selected_rating();
@@ -523,8 +529,42 @@ impl ChafaTui {
                 self.ui_layout.preview_width,
                 self.ui_layout.preview_height,
             );
-            self.update_preview();
         }
+
+        // Always rebuilt, even with nothing previewable selected: the listing may have
+        // moved the selection or emptied, and the pane must show what is selected now.
+        self.update_preview();
+    }
+
+    /// Re-read the listing from disk, keeping the selection on the same file. Files may have
+    /// been added, removed or renamed by other programs since the folder was read. If the
+    /// selected file is gone, the selection moves to the file that followed it, or failing
+    /// that the one before, the same way it does after ptui deletes a file itself.
+    fn refresh_file_list(&mut self) {
+        let previous = self.file_browser.get_selected_file().map(|f| f.name.clone());
+        let fallback_names = self.file_browser.selection_fallback_names();
+
+        if let Err(e) = self.file_browser.refresh_files() {
+            self.append_message(format!("WARNING: Failed to refresh file list: {}", e));
+        }
+        self.apply_fallback_ratings();
+        if !self.file_browser.select_first_available(&fallback_names) {
+            self.clamp_selection();
+        }
+
+        let current = self.file_browser.get_selected_file().map(|f| f.name.clone());
+        if current != previous {
+            self.reset_text_scroll();
+        }
+        self.needs_redraw = true;
+    }
+
+    /// Name of the selected file, for tests that drive the app through its keys. The binary
+    /// compiles this module too and never calls it.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub fn selected_file_name(&self) -> Option<&str> {
+        self.file_browser.get_selected_file().map(|f| f.name.as_str())
     }
 
     /// Re-read the selected file's rating, preferring its sidecar over the private store.
