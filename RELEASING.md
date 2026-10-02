@@ -14,8 +14,9 @@ Prerequisites
 - **`nasm`** - build dependency of turbojpeg, used by the `fast-jpeg` feature.
 - **A clean working directory** - `release.sh` checks `git status --porcelain`, which also
   counts *untracked* files. Commit, ignore, or `git stash -u` anything left over first.
-- For the Homebrew step, the tap checked out at
-  `/home/linuxbrew/.linuxbrew/Homebrew/Library/Taps/narbs/homebrew-tap`.
+- **The Homebrew tap** (`brew tap narbs/homebrew-tap`, on Linux at
+  `/home/linuxbrew/.linuxbrew/Homebrew/Library/Taps/narbs/homebrew-tap`) with no uncommitted
+  changes, and push access to it.
 
 Before you start
 ----------------
@@ -26,8 +27,8 @@ Before you start
    beforehand to be included in the tag.
 3. Update `README.md` if controls or configuration changed.
 
-Step 1 - Release, tag and publish to the AUR
---------------------------------------------
+Step 1 - Release, tag and publish
+---------------------------------
 
     ./release.sh --minor     # or --patch / --major
 
@@ -36,50 +37,48 @@ Note that `./release.sh` with no arguments prints help and exits - the bump type
 The script:
 
 1. Bumps the version in `Cargo.toml` (patch/minor/major).
-2. Builds with `cargo build --release --features fast-jpeg`.
-3. Runs `cargo test`. The release aborts if either fails.
-4. Commits `Cargo.toml` and `Cargo.lock` as `Bump release to vX.Y.Z`.
-5. Creates tag `vX.Y.Z` and **pushes the tag** to origin.
-6. Runs `cargo aur`, then `patch-aur-pkgbuild.sh`, which adds `--features fast-jpeg`, sets
+2. Builds with `cargo build --release --features fast-jpeg` and runs `cargo test`. The release
+   aborts if either fails.
+3. Runs `cargo aur`, then `patch-aur-pkgbuild.sh`, which adds `--features fast-jpeg`, sets
    `pkgbase=ptui` (the AUR repository's name) and installs the license under
    `/usr/share/licenses/ptui`. The tarball also carries README.md, NEWS.md, CHANGELOG.md and
    `docs/example.config.ptui.json`, installed under `/usr/share/doc/ptui/` - the list is
    `files` in `[package.metadata.aur]` in `Cargo.toml`.
-7. Copies the PKGBUILD into `../ptui-aur`, regenerates `.SRCINFO`, then commits and pushes
-   the AUR repository.
+4. Commits `Cargo.toml` and `Cargo.lock` as `Bump release to vX.Y.Z`, creates tag `vX.Y.Z`,
+   and pushes both the branch and the tag.
+5. Creates the GitHub release and uploads the Linux tarball, with notes taken from the
+   CHANGELOG.md entry.
+6. Copies the PKGBUILD into `../ptui-aur`, regenerates `.SRCINFO`, then commits and pushes
+   the AUR repository. This comes after step 5 so the PKGBUILD's `source=` already resolves.
+7. Runs `update-ptui-homebrew.sh` to update, commit and push the Homebrew tap (see Step 2).
+   Everything else is published by then, so if this fails the release still finishes, with a
+   warning and the command to re-run.
 
 To rehearse without committing or pushing anything:
 
     ./release.sh --dry-run --minor
 
-The dry run still edits `Cargo.toml` and builds, leaving the files in place for inspection; it
-keeps a `Cargo.toml.backup` and removes it at the end.
+The dry run still edits `Cargo.toml` and builds, then restores `Cargo.toml` and `Cargo.lock`
+at the end.
 
-Step 2 - Push main
-------------------
+Step 2 - The Homebrew tap
+-------------------------
 
-    git push origin main
+`release.sh` does this for you; run it by hand only to retry after a failure. It needs the tag
+to be on GitHub, since it downloads the tag tarball.
 
-`release.sh` pushes the tag but not the branch, and reminds you of this when it finishes.
+    ./update-ptui-homebrew.sh            # version from Cargo.toml
+    ./update-ptui-homebrew.sh 2.7.0      # or a given version
+    ./update-ptui-homebrew.sh --no-push  # commit in the tap but do not push
 
-Step 3 - Update the Homebrew tap
---------------------------------
+The script finds the tap with `brew --repository narbs/homebrew-tap`, refuses to run if the tap
+has uncommitted changes, and pulls it. It then downloads
+`https://github.com/narbs/ptui/archive/refs/tags/vX.Y.Z.tar.gz`, computes its SHA256, updates
+`Formula/narbs-ptui.rb`, checks that both the url and sha256 were replaced, prints the diff, and
+commits and pushes the tap as `Update ptui to vX.Y.Z`. If the formula is already at that version
+it does nothing, so it is safe to re-run.
 
-Only works once the tag is on GitHub, since it downloads the tag tarball.
-
-    ./update-ptui-homebrew.sh 2.3.0
-
-The script downloads `https://github.com/narbs/ptui/archive/refs/tags/vX.Y.Z.tar.gz`, computes
-its SHA256, and updates `Formula/narbs-ptui.rb` in the local tap. It does **not** commit -
-review and push the tap yourself:
-
-    cd /home/linuxbrew/.linuxbrew/Homebrew/Library/Taps/narbs/homebrew-tap
-    git diff Formula/narbs-ptui.rb
-    git add Formula/narbs-ptui.rb
-    git commit -m "Update ptui to vX.Y.Z"
-    git push
-
-Step 4 - macOS build
+Step 3 - macOS build
 --------------------
 
 On a Mac:
