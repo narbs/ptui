@@ -382,6 +382,18 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
+    /// The example shipped in packages (docs/example.config.ptui.json) is what a fresh
+    /// install writes, so it has to change whenever a default does.
+    #[test]
+    fn test_example_config_matches_defaults() {
+        let example: serde_json::Value = serde_json::from_str(include_str!(
+            "../docs/example.config.ptui.json"
+        ))
+        .unwrap();
+        let defaults = serde_json::to_value(PTuiConfig::default()).unwrap();
+        assert_eq!(example, defaults);
+    }
+
     #[test]
     fn test_chafa_config_default() {
         let config = ChafaConfig::default();

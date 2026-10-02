@@ -3,7 +3,7 @@ name = "ptui"
 version = "2.6.1"
 edition = "2024"
 authors = ["Christian Clare"]
-description = "Picture TUI"
+description = "Picture TUI - terminal image viewer with a file browser and live previews"
 license = "MIT"
 repository = "https://github.com/narbs/ptui"
 homepage = "https://github.com/narbs/ptui"
@@ -14,7 +14,7 @@ readme = "README.md"
 [package.metadata.aur]
 depends = ["chafa", "imagemagick", "jp2a"]
 makedepends = ["nasm"]
-files = [["README.md", "/usr/share/doc/ptui/README.md"], ["NEWS.md", "/usr/share/doc/ptui/NEWS.md"], ["CHANGELOG.md", "/usr/share/doc/ptui/CHANGELOG.md"]]
+files = [["README.md", "/usr/share/doc/ptui/README.md"], ["NEWS.md", "/usr/share/doc/ptui/NEWS.md"], ["CHANGELOG.md", "/usr/share/doc/ptui/CHANGELOG.md"], ["docs/example.config.ptui.json", "/usr/share/doc/ptui/example.config.ptui.json"]]
 
 [[bin]]
 name = "ptui"

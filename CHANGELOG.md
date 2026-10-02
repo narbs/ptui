@@ -4,6 +4,15 @@ PTUI - Picture TUI - CHANGELOG
 Oct 2, 2026
 -----------
 
+PTUI 2.7.0 released. Packaging changes, following feedback from an AUR user. The package now
+installs an example configuration, holding the defaults a fresh install writes, at
+/usr/share/doc/ptui/example.config.ptui.json, alongside the README, NEWS and CHANGELOG. The license
+moves from /usr/share/licenses/ptui-bin to /usr/share/licenses/ptui, matching the docs. NEWS.md has
+been brought up to date, and the package description now says what ptui is.
+
+Oct 2, 2026
+-----------
+
 PTUI 2.6.1 released. r now re-reads the file list as well as the preview, so files added, removed
 or renamed by other programs show up without leaving the folder and coming back. The selection stays
 on the same file, found again by name so files appearing ahead of it do not shift it onto another

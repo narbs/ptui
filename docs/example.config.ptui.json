@@ -1,0 +1,30 @@
+{
+  "converter": {
+    "chafa": {
+      "format": "ansi",
+      "colors": "full"
+    },
+    "jp2a": {
+      "colors": true,
+      "invert": false,
+      "dither": "none",
+      "chars": null
+    },
+    "graphical": {
+      "filter_type": "lanczos3",
+      "max_dimension": 384,
+      "auto_resize": true
+    },
+    "selected": "chafa"
+  },
+  "locale": "en",
+  "slideshow_delay_ms": 2000,
+  "slideshow_transitions": {
+    "enabled": false,
+    "effect": "scattering",
+    "frame_duration_ms": 50
+  },
+  "stars": {
+    "sidecars": "ask"
+  }
+}
