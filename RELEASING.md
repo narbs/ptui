@@ -40,10 +40,13 @@ The script:
 3. Runs `cargo test`. The release aborts if either fails.
 4. Commits `Cargo.toml` and `Cargo.lock` as `Bump release to vX.Y.Z`.
 5. Creates tag `vX.Y.Z` and **pushes the tag** to origin.
-6. Runs `cargo aur`, then `patch-aur-pkgbuild.sh` to add `--features fast-jpeg` to the
-   generated PKGBUILD.
-7. Copies the PKGBUILD into `../ptui-aur`, regenerates `.SRCINFO`, rewrites
-   `pkgbase = ptui-bin` to `pkgbase = ptui`, then commits and pushes the AUR repository.
+6. Runs `cargo aur`, then `patch-aur-pkgbuild.sh`, which adds `--features fast-jpeg`, sets
+   `pkgbase=ptui` (the AUR repository's name) and installs the license under
+   `/usr/share/licenses/ptui`. The tarball also carries README.md, NEWS.md, CHANGELOG.md and
+   `docs/example.config.ptui.json`, installed under `/usr/share/doc/ptui/` - the list is
+   `files` in `[package.metadata.aur]` in `Cargo.toml`.
+7. Copies the PKGBUILD into `../ptui-aur`, regenerates `.SRCINFO`, then commits and pushes
+   the AUR repository.
 
 To rehearse without committing or pushing anything:
 
@@ -103,8 +106,10 @@ After the release
 
 - Verify the AUR package: `yay -S ptui-bin`
 - Verify Homebrew: `brew install narbs/homebrew-tap/narbs-ptui`
-- `NEWS.md` is a per-release announcement file and is currently stale (it still describes
-  v1.0.1). Update it if the release deserves an announcement.
+- `NEWS.md` is a per-release announcement file and ships in the packages. Update it when a
+  release deserves an announcement.
+- If a default in `config.rs` changes, update `docs/example.config.ptui.json` to match;
+  `test_example_config_matches_defaults` fails until you do.
 
 Development builds
 ------------------

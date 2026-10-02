@@ -173,6 +173,9 @@ On a Mac the configuration file is created here: "$HOME/Library/Application Supp
 
 Edits refresh in the app automatically.
 
+The defaults it is created with are in [docs/example.config.ptui.json](docs/example.config.ptui.json),
+which the AUR package installs as /usr/share/doc/ptui/example.config.ptui.json.
+
 Only the keys you set need to be present - anything missing takes its default. If the file
 cannot be parsed at all, ptui leaves it exactly as it is, runs on defaults for that session,
 and says so in the messages pane with the line and column of the problem, so a stray comma

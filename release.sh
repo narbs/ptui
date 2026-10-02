@@ -172,7 +172,7 @@ build_release_artifacts() {
     exit 1
   fi
 
-  echo_info "Patching PKGBUILD to add --features fast-jpeg..."
+  echo_info "Patching PKGBUILD (fast-jpeg, pkgbase, license path)..."
   if ! ./patch-aur-pkgbuild.sh; then
     echo_error "Failed to patch PKGBUILD!"
     exit 1
@@ -272,7 +272,7 @@ update_aur_repo() {
 
   if [ "$DRY_RUN" = true ]; then
     echo_dry "Would copy PKGBUILD from target/cargo-aur/ to ../ptui-aur"
-    echo_dry "Would regenerate .SRCINFO and rewrite pkgbase to 'ptui'"
+    echo_dry "Would regenerate .SRCINFO"
     echo_dry "Would commit AUR changes with message: 'Update to v$version' and push"
     return
   fi
@@ -285,9 +285,6 @@ update_aur_repo() {
 
     echo_info "Regenerating .SRCINFO..."
     makepkg --printsrcinfo >.SRCINFO
-
-    echo_info "Modifying .SRCINFO to change ptui-bin to ptui..."
-    sed -i 's/pkgbase = ptui-bin/pkgbase = ptui/g' .SRCINFO
 
     echo_info "Committing AUR changes..."
     git add PKGBUILD .SRCINFO
