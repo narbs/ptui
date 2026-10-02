@@ -1,6 +1,6 @@
 [package]
 name = "ptui"
-version = "2.6.1"
+version = "2.7.0"
 edition = "2024"
 authors = ["Christian Clare"]
 description = "Picture TUI - terminal image viewer with a file browser and live previews"
