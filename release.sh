@@ -2,7 +2,7 @@
 
 # Release script for ptui
 # Bumps version, builds, tests, commits, tags, publishes the GitHub release
-# (with the Linux binary), and updates the AUR.
+# (with the Linux binary), and updates the AUR and the Homebrew tap.
 # Usage: ./release.sh [--dry-run] [--patch|--minor|--major]
 #
 # Order of operations (real run):
@@ -12,6 +12,7 @@
 #   4. Commit + tag, push the branch and the tag
 #   5. Publish the GitHub release and upload the Linux binary
 #   6. Update and push the AUR repo (only after the binary exists, so source= resolves)
+#   7. Update and push the Homebrew tap (update-ptui-homebrew.sh)
 #
 # The macOS binary is built separately on a Mac; upload it to the same release afterwards.
 
@@ -295,6 +296,24 @@ update_aur_repo() {
   )
 }
 
+# Function to update the Homebrew tap. Everything else is published by now, so a failure here
+# is reported with the command to re-run rather than failing the release.
+update_homebrew_tap() {
+  local version=$1
+
+  if [ "$DRY_RUN" = true ]; then
+    echo_dry "Would run ./update-ptui-homebrew.sh $version to update, commit and push the Homebrew tap"
+    return
+  fi
+
+  echo_info "Updating the Homebrew tap..."
+  if ! ./update-ptui-homebrew.sh "$version"; then
+    echo_warn "Homebrew tap update failed. Fix the problem above, then run:"
+    echo_warn "  ./update-ptui-homebrew.sh $version"
+    return 1
+  fi
+}
+
 # Main execution
 main() {
 
@@ -349,6 +368,10 @@ main() {
   # 6. Update and push the AUR repo (now that the binary exists)
   update_aur_repo "$new_version"
 
+  # 7. Update and push the Homebrew tap (needs the tag on GitHub, pushed in step 4)
+  local homebrew_ok=true
+  update_homebrew_tap "$new_version" || homebrew_ok=false
+
   if [ "$DRY_RUN" = true ]; then
     echo ""
     echo_dry "Dry run completed! Here's what would happen in a real release:"
@@ -357,6 +380,7 @@ main() {
     echo_dry "- Committed, tagged v$new_version, pushed branch + tag"
     echo_dry "- GitHub release v$new_version created with the Linux binary"
     echo_dry "- AUR package updated and pushed"
+    echo_dry "- Homebrew tap updated and pushed"
     echo_dry ""
     echo_dry "To perform the actual release, run: ./release.sh --patch|--minor|--major"
     # Restore Cargo.toml/Cargo.lock so a dry run leaves the working tree clean
@@ -364,7 +388,12 @@ main() {
     [ -f Cargo.lock.backup ] && mv Cargo.lock.backup Cargo.lock
   else
     echo_info "Release v$new_version completed successfully!"
-    echo_info "Pushed: branch, tag v$new_version, GitHub release (Linux binary), and AUR."
+    if [ "$homebrew_ok" = true ]; then
+      echo_info "Pushed: branch, tag v$new_version, GitHub release (Linux binary), AUR and Homebrew tap."
+    else
+      echo_info "Pushed: branch, tag v$new_version, GitHub release (Linux binary) and AUR."
+      echo_warn "The Homebrew tap was NOT updated - see the warning above."
+    fi
     echo_warn "macOS binary is built separately. On a Mac, run:"
     echo_warn "  ./release-mac.sh"
     echo_warn "which builds it and uploads it to the v$new_version release."
