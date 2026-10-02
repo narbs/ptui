@@ -1,6 +1,16 @@
 PTUI - Picture TUI - CHANGELOG
 ==============================
 
+Oct 2, 2026
+-----------
+
+PTUI 2.6.1 released. r now re-reads the file list as well as the preview, so files added, removed
+or renamed by other programs show up without leaving the folder and coming back. The selection stays
+on the same file, found again by name so files appearing ahead of it do not shift it onto another
+one, and is centred in the list. If the selected file has been deleted, the selection moves to the
+file that followed it, or to the one before if it was last, just as it does after deleting a file
+with x. During a slideshow r still refreshes only the image on screen.
+
 Aug 19, 2026
 ------------
 
