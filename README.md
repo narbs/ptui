@@ -79,7 +79,7 @@ Controls:
     Backspace         - Go to parent directory
     [ / ]             - Resize preview window
     r                 - Re-read the file list, preview and rating, keeping the selection
-    space             - Start slideshow (arrows work here too)
+    space             - Start slideshow (arrow keys or j/k work here too)
     u / space         - Scroll a text file up / down (when a text file is selected)
     x                 - Delete file
     c                 - Copy file to a folder

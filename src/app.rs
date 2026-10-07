@@ -210,6 +210,13 @@ impl ChafaTui {
         match key.code {
             // Ctrl+C is handled above, before the dialogs.
             KeyCode::Char('q') | KeyCode::Esc => return Err("Quit".into()),
+            // In slideshow mode j/k and down/up mirror right/left instead of moving the list selection
+            KeyCode::Down | KeyCode::Char('j') if self.is_slideshow_mode => {
+                self.advance_slideshow();
+            }
+            KeyCode::Up | KeyCode::Char('k') if self.is_slideshow_mode => {
+                self.slideshow_go_backward();
+            }
             KeyCode::Down | KeyCode::Char('j') => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
