@@ -1,6 +1,13 @@
 PTUI - Picture TUI - CHANGELOG
 ==============================
 
+Oct 7, 2026
+-----------
+
+PTUI 2.7.1 released. In a slideshow, j and k and the Up and Down arrows now change slides, as Right
+and Left do: j and Down go to the next image, k and Up to the previous one. Before, they moved the
+file list selection behind the slideshow and redrew the list-view preview instead.
+
 Oct 2, 2026
 -----------
 
