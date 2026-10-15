@@ -11,6 +11,7 @@ use crate::ui::{UILayout, UIRenderer};
 use ansi_to_tui::IntoText;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::text::Text;
+use std::collections::HashSet;
 use std::error::Error;
 use std::path::PathBuf;
 use std::process::Command;
@@ -574,6 +575,19 @@ impl ChafaTui {
         self.file_browser.get_selected_file().map(|f| f.name.as_str())
     }
 
+    /// Name of the image the slideshow is showing, or None outside a slideshow, for tests
+    /// that drive the app through its keys. The binary compiles this module too and never
+    /// calls it.
+    #[doc(hidden)]
+    #[allow(dead_code)]
+    pub fn slideshow_file_name(&self) -> Option<&str> {
+        if !self.is_slideshow_mode {
+            return None;
+        }
+        let index = *self.slideshow_image_files.get(self.slideshow_current_index)?;
+        self.file_browser.files.get(index).map(|f| f.name.as_str())
+    }
+
     /// Re-read the selected file's rating, preferring its sidecar over the private store.
     fn reload_selected_rating(&mut self) {
         let Some(file) = self.file_browser.get_selected_file() else {
@@ -628,6 +642,17 @@ impl ChafaTui {
     }
 
     fn show_delete_dialog(&mut self) {
+        // A slideshow advances without moving the browser's selection, so point the
+        // selection at the image actually on screen, or x would delete a different file.
+        if self.is_slideshow_mode
+            && let Some(index) = self
+                .slideshow_image_files
+                .get(self.slideshow_current_index)
+                .copied()
+        {
+            self.file_browser.set_selected_index(index);
+        }
+
         // Copied out before reporting anything, so the browser borrow does not outlive it.
         let Some((name, is_directory)) = self
             .file_browser
@@ -697,8 +722,19 @@ impl ChafaTui {
                     // Refresh file list to remove deleted file. The deleted file is gone
                     // from the fallback list, so the selection lands on the file that
                     // followed it, by name rather than by a position the refresh may have
-                    // shifted.
-                    let fallback_names = self.file_browser.selection_fallback_names();
+                    // shifted. A slideshow shows only images, so it moves on to the next
+                    // image rather than to whatever file followed the deleted one.
+                    let mut fallback_names = self.file_browser.selection_fallback_names();
+                    if self.is_slideshow_mode {
+                        let image_names: HashSet<&str> = self
+                            .file_browser
+                            .files
+                            .iter()
+                            .filter(|file| file.is_image())
+                            .map(|file| file.name.as_str())
+                            .collect();
+                        fallback_names.retain(|name| image_names.contains(name.as_str()));
+                    }
 
                     if let Err(e) = self.file_browser.refresh_files() {
                         let current_debug = self.preview_manager.get_debug_info();
@@ -712,8 +748,11 @@ impl ChafaTui {
                         self.clamp_selection();
                     }
 
-                    // Update preview after refresh
-                    self.update_preview();
+                    if self.is_slideshow_mode {
+                        self.resume_slideshow_after_delete();
+                    } else {
+                        self.update_preview();
+                    }
                 }
                 Err(e) => {
                     self.append_message(format!("ERROR: Failed to delete {}: {}", file_name, e));
@@ -1037,17 +1076,47 @@ impl ChafaTui {
         Err("Opening system file browser not supported on this platform".into())
     }
 
+    /// Indices of the image files in the listing, the slideshow's playlist.
+    fn collect_slideshow_images(&self) -> Vec<usize> {
+        self.file_browser
+            .files
+            .iter()
+            .enumerate()
+            .filter(|(_, file)| file.is_image())
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Carry on the slideshow from the image now selected, after the one on screen was
+    /// deleted. The listing has been re-read, so the playlist's indices are stale and must
+    /// be rebuilt. With no images left there is nothing to show, so the slideshow ends.
+    fn resume_slideshow_after_delete(&mut self) {
+        self.slideshow_image_files = self.collect_slideshow_images();
+        self.transition_manager.reset_transition();
+        self.slideshow_previous_content = None;
+
+        let selected = self.file_browser.selected_index;
+        let Some(pos) = self
+            .slideshow_image_files
+            .iter()
+            .position(|&i| i == selected)
+        else {
+            self.is_slideshow_mode = false;
+            self.update_preview();
+            return;
+        };
+
+        self.slideshow_current_index = pos;
+        self.slideshow_start_index = selected;
+        self.slideshow_last_change = Instant::now();
+        self.update_slideshow_preview();
+        self.needs_redraw = true;
+    }
+
     fn enter_slideshow_mode(&mut self) {
         // Build list of image files starting from current selection
-        self.slideshow_image_files.clear();
         self.slideshow_start_index = self.file_browser.selected_index;
-
-        // Find all image files in the current directory
-        for (i, file) in self.file_browser.files.iter().enumerate() {
-            if file.is_image() {
-                self.slideshow_image_files.push(i);
-            }
-        }
+        self.slideshow_image_files = self.collect_slideshow_images();
 
         if self.slideshow_image_files.is_empty() {
             // No images to show slideshow
