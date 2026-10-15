@@ -1,6 +1,16 @@
 PTUI - Picture TUI - CHANGELOG
 ==============================
 
+Oct 15, 2026
+------------
+
+PTUI 2.7.2 released. Deleting a file with x during a slideshow now deletes the image on screen.
+Before, it deleted the file selected in the list behind the slideshow, which the slideshow does not
+move, so it could remove a different image from the one you were looking at. After the delete the
+slideshow carries on with the next image, skipping files that are not images, or the one before if
+the deleted image was last, instead of showing the list-view preview of whatever file followed. If
+no images are left, the slideshow ends.
+
 Oct 7, 2026
 -----------
 
