@@ -211,6 +211,15 @@ impl ChafaTui {
             return Ok(());
         }
 
+        // Help over a slideshow: any key but q closes it and the slideshow picks up again,
+        // giving the image on screen a full delay rather than jumping straight on.
+        if self.slideshow_help_showing() && key.code != KeyCode::Char('q') {
+            self.show_help_toggle = false;
+            self.slideshow_last_change = Instant::now();
+            self.needs_redraw = true;
+            return Ok(());
+        }
+
         match key.code {
             // Ctrl+C is handled above, before the dialogs.
             KeyCode::Char('q') | KeyCode::Esc => return Err("Quit".into()),
@@ -399,6 +408,11 @@ impl ChafaTui {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
                 self.rate_selected(MAX_RATING);
+            }
+            // The slideshow's own preview stays put underneath, ready for when help closes
+            KeyCode::Char('?') if self.is_slideshow_mode => {
+                self.show_help_toggle = true;
+                self.needs_redraw = true;
             }
             KeyCode::Char('?') => {
                 self.show_help_on_startup = false;
@@ -781,6 +795,16 @@ impl ChafaTui {
         self.show_delete_confirmation
             || self.transfer_dialog.is_some()
             || self.pending_rating.is_some()
+    }
+
+    /// True while help is shown over a paused slideshow.
+    fn slideshow_help_showing(&self) -> bool {
+        self.is_slideshow_mode && self.show_help_toggle
+    }
+
+    /// True while text covers the image: graphics must stay off and the slideshow holds.
+    fn image_hidden(&self) -> bool {
+        self.dialog_active() || self.slideshow_help_showing()
     }
 
     /// Show a message in the debug pane.
@@ -1278,8 +1302,8 @@ impl ChafaTui {
 
     pub fn update_slideshow(&mut self) {
         // A dialog is a question about the image on screen, so the slideshow holds still
-        // until it is answered rather than moving on to a different one.
-        if self.dialog_active() {
+        // until it is answered rather than moving on to a different one. Help pauses it too.
+        if self.image_hidden() {
             return;
         }
         if self.is_slideshow_mode
@@ -1314,7 +1338,17 @@ impl ChafaTui {
         self.terminal_width = size.width;
         self.terminal_height = size.height;
 
-        if self.is_slideshow_mode {
+        if self.slideshow_help_showing() {
+            // Help takes the whole screen; no content means the preview pane draws help
+            UIRenderer::render_preview(
+                f,
+                size,
+                None,
+                &self.localization,
+                self.ascii_logo.as_ref(),
+                false,
+            );
+        } else if self.is_slideshow_mode {
             // Check if we have a transition in progress
             let transition_content: Option<PreviewContent>;
             let display_content = if let Some(transition_frame) =
@@ -1609,7 +1643,7 @@ impl ChafaTui {
 
             // Clear graphics if not graphical content, or if delete dialog is showing
             // (dialog needs to appear above the graphics layer)
-            if !is_current_graphical || self.dialog_active() {
+            if !is_current_graphical || self.image_hidden() {
                 use std::io::Write;
                 // Send Kitty protocol command to delete all images
                 let delete_all_cmd = "\x1b_Ga=d,d=a\x1b\\";
@@ -1624,8 +1658,8 @@ impl ChafaTui {
     pub fn render_kitty_post_draw(&mut self) {
         #[cfg(not(test))]
         {
-            // Don't render graphics when a modal dialog is showing
-            if self.dialog_active() {
+            // Don't render graphics when a modal dialog or slideshow help is showing
+            if self.image_hidden() {
                 return;
             }
 
