@@ -58,6 +58,8 @@ pub struct ChafaTui {
     slideshow_delay: Duration,
     slideshow_image_files: Vec<usize>, // Indices of image files only
     slideshow_previous_content: Option<PreviewContent>,
+    // False when Enter opened the image full-screen: the user steps through by hand
+    slideshow_auto_advance: bool,
     // Delete confirmation dialog state
     show_delete_confirmation: bool,
     delete_target_file: Option<String>,
@@ -126,6 +128,7 @@ impl ChafaTui {
             slideshow_delay,
             slideshow_image_files: Vec::new(),
             slideshow_previous_content: None,
+            slideshow_auto_advance: true,
             // Delete confirmation dialog state
             show_delete_confirmation: false,
             delete_target_file: None,
@@ -295,10 +298,20 @@ impl ChafaTui {
                 self.preview_manager.set_message(message.to_string());
                 self.update_preview();
             }
+            KeyCode::Enter if self.is_slideshow_mode => {
+                self.exit_slideshow_mode();
+            }
             KeyCode::Enter => {
                 self.show_help_on_startup = false;
                 self.show_help_toggle = false;
-                if self.file_browser.enter_directory()? {
+                // An image opens full-screen, stepped through by hand rather than on a timer
+                if self
+                    .file_browser
+                    .get_selected_file()
+                    .is_some_and(|file| file.is_image())
+                {
+                    self.enter_slideshow_mode(false);
+                } else if self.file_browser.enter_directory()? {
                     self.preview_manager.clear_cache();
                     self.apply_fallback_ratings();
                     self.update_preview();
@@ -373,7 +386,7 @@ impl ChafaTui {
                 } else if self.is_slideshow_mode {
                     self.exit_slideshow_mode();
                 } else {
-                    self.enter_slideshow_mode();
+                    self.enter_slideshow_mode(true);
                 }
             }
             KeyCode::Char(c @ '0'..='5') => {
@@ -1113,7 +1126,9 @@ impl ChafaTui {
         self.needs_redraw = true;
     }
 
-    fn enter_slideshow_mode(&mut self) {
+    /// Show the images full-screen from the current selection. With `auto_advance` off the
+    /// slides only change on the arrow keys or j/k.
+    fn enter_slideshow_mode(&mut self, auto_advance: bool) {
         // Build list of image files starting from current selection
         self.slideshow_start_index = self.file_browser.selected_index;
         self.slideshow_image_files = self.collect_slideshow_images();
@@ -1140,6 +1155,7 @@ impl ChafaTui {
         }
 
         self.is_slideshow_mode = true;
+        self.slideshow_auto_advance = auto_advance;
         self.update_slideshow_preview();
         self.slideshow_last_change = Instant::now();
         self.needs_redraw = true;
@@ -1266,7 +1282,10 @@ impl ChafaTui {
         if self.dialog_active() {
             return;
         }
-        if self.is_slideshow_mode && self.slideshow_last_change.elapsed() >= self.slideshow_delay {
+        if self.is_slideshow_mode
+            && self.slideshow_auto_advance
+            && self.slideshow_last_change.elapsed() >= self.slideshow_delay
+        {
             // Only advance slideshow if no transition is in progress
             if !self.transition_manager.is_in_transition() {
                 self.advance_slideshow();
@@ -1315,6 +1334,7 @@ impl ChafaTui {
                 &self.localization,
                 self.slideshow_current_index + 1,
                 self.slideshow_image_files.len(),
+                self.slideshow_auto_advance,
             );
         } else {
             // Regular UI layout

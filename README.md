@@ -75,7 +75,8 @@ Controls:
     Ctrl+F / Ctrl+B   - Jump by a page (same as Page Up/Page Down)
     f / b             - Jump forward/back by 10 files
     Home / End        - Go to start / end of the list
-    Enter             - Enter directory
+    Enter             - Enter directory, or view an image full-screen (arrow keys or j/k to
+                        change image, Enter to return; no auto-advance)
     Backspace         - Go to parent directory
     [ / ]             - Resize preview window
     r                 - Re-read the file list, preview and rating, keeping the selection

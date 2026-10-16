@@ -546,6 +546,7 @@ impl UIRenderer {
         localization: &Localization,
         current_image: usize,
         total_images: usize,
+        auto_advance: bool,
     ) {
         // Create full-screen slideshow layout with status bar at bottom
         let chunks = Layout::default()
@@ -651,7 +652,11 @@ impl UIRenderer {
 
         let status_text = format!(
             "[>] {} | {} {}/{} | {}",
-            localization.get("slideshow_mode"),
+            localization.get(if auto_advance {
+                "slideshow_mode"
+            } else {
+                "viewer_mode"
+            }),
             localization.get("slideshow_image"),
             current_image,
             total_images,
@@ -1169,7 +1174,7 @@ mod tests {
 
         terminal
             .draw(|f| {
-                UIRenderer::render_slideshow(f, area, Some(&preview), &localization, 3, 10);
+                UIRenderer::render_slideshow(f, area, Some(&preview), &localization, 3, 10, true);
             })
             .unwrap();
     }
