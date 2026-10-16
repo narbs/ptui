@@ -1,6 +1,15 @@
 PTUI - Picture TUI - CHANGELOG
 ==============================
 
+Oct 16, 2026
+------------
+
+PTUI 2.7.3 released. Enter on an image now opens it full-screen, like a slideshow that does not
+move on by itself: the arrow keys or j and k change image, and Enter goes back to the list with
+the last image shown selected. Enter on a directory still opens it. ? during a slideshow now
+shows help full-screen and pauses the slideshow; any key but q closes help and the slideshow
+carries on from the same image. Before, ? in a slideshow blanked the image and showed nothing.
+
 Oct 15, 2026
 ------------
 
