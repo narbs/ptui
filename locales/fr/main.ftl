@@ -32,6 +32,7 @@ image_file_prefix = Image :
 slideshow_mode = Mode Diaporama
 viewer_mode = Visionneuse d'images
 slideshow_image = Image
+rating_label = Note
 slideshow_press_any_key = Appuyez sur n'importe quelle touche pour quitter
 messages = Messages
 ptui_ready = PTUI prêt...

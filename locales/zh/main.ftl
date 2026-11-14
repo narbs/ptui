@@ -32,6 +32,7 @@ image_file_prefix = 图像:
 slideshow_mode = 幻灯片模式
 viewer_mode = 图像查看器
 slideshow_image = 图像
+rating_label = 评分
 slideshow_press_any_key = 按任意键退出
 messages = 消息
 ptui_ready = PTUI 准备就绪...

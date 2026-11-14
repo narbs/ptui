@@ -32,6 +32,7 @@ image_file_prefix = Bild:
 slideshow_mode = Diashow-Modus
 viewer_mode = Bildansicht
 slideshow_image = Bild
+rating_label = Bewertung
 slideshow_press_any_key = Beliebige Taste zum Beenden drücken
 messages = Nachrichten
 ptui_ready = PTUI bereit...

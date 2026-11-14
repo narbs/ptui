@@ -7,7 +7,7 @@ use crate::ratings::{self, MAX_RATING};
 use crate::state::{PTuiState, RatingDestination, SidecarConsent, rating_destination};
 use crate::transfer::{self, Resolution, Stage, TransferAction, TransferDialog, TransferMode};
 use crate::transitions::TransitionManager;
-use crate::ui::{UILayout, UIRenderer};
+use crate::ui::{SlideshowStatus, UILayout, UIRenderer};
 use ansi_to_tui::IntoText;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::text::Text;
@@ -576,7 +576,10 @@ impl ChafaTui {
     /// selected file is gone, the selection moves to the file that followed it, or failing
     /// that the one before, the same way it does after ptui deletes a file itself.
     fn refresh_file_list(&mut self) {
-        let previous = self.file_browser.get_selected_file().map(|f| f.name.clone());
+        let previous = self
+            .file_browser
+            .get_selected_file()
+            .map(|f| f.name.clone());
         let fallback_names = self.file_browser.selection_fallback_names();
 
         if let Err(e) = self.file_browser.refresh_files() {
@@ -587,7 +590,10 @@ impl ChafaTui {
             self.clamp_selection();
         }
 
-        let current = self.file_browser.get_selected_file().map(|f| f.name.clone());
+        let current = self
+            .file_browser
+            .get_selected_file()
+            .map(|f| f.name.clone());
         if current != previous {
             self.reset_text_scroll();
         }
@@ -599,7 +605,9 @@ impl ChafaTui {
     #[doc(hidden)]
     #[allow(dead_code)]
     pub fn selected_file_name(&self) -> Option<&str> {
-        self.file_browser.get_selected_file().map(|f| f.name.as_str())
+        self.file_browser
+            .get_selected_file()
+            .map(|f| f.name.as_str())
     }
 
     /// Name of the image the slideshow is showing, or None outside a slideshow, for tests
@@ -611,8 +619,19 @@ impl ChafaTui {
         if !self.is_slideshow_mode {
             return None;
         }
-        let index = *self.slideshow_image_files.get(self.slideshow_current_index)?;
+        let index = *self
+            .slideshow_image_files
+            .get(self.slideshow_current_index)?;
         self.file_browser.files.get(index).map(|f| f.name.as_str())
+    }
+
+    /// The rating of the image on screen in a slideshow, read from the browser so that
+    /// rating it with 0-5 shows up straight away.
+    fn slideshow_rating(&self) -> u8 {
+        self.slideshow_image_files
+            .get(self.slideshow_current_index)
+            .and_then(|&index| self.file_browser.files.get(index))
+            .map_or(0, |file| file.rating)
     }
 
     /// Re-read the selected file's rating, preferring its sidecar over the private store.
@@ -1366,9 +1385,12 @@ impl ChafaTui {
                 size,
                 display_content,
                 &self.localization,
-                self.slideshow_current_index + 1,
-                self.slideshow_image_files.len(),
-                self.slideshow_auto_advance,
+                SlideshowStatus {
+                    current_image: self.slideshow_current_index + 1,
+                    total_images: self.slideshow_image_files.len(),
+                    auto_advance: self.slideshow_auto_advance,
+                    rating: self.slideshow_rating(),
+                },
             );
         } else {
             // Regular UI layout

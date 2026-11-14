@@ -1,6 +1,7 @@
 use crate::file_browser::FileBrowser;
 use crate::localization::Localization;
 use crate::preview::PreviewContent;
+use crate::ratings::MAX_RATING;
 use crate::transfer::{Stage, TransferDialog};
 use ratatui::{
     Frame,
@@ -188,6 +189,64 @@ pub fn shorten_path_text(text: &str, max_chars: usize) -> String {
     }
     let tail: String = chars[chars.len() - (max_chars - 3)..].iter().collect();
     format!("...{}", tail)
+}
+
+/// What the status bar under a full-screen image reports.
+#[derive(Debug, Clone, Copy)]
+pub struct SlideshowStatus {
+    /// 1-based position of the image on screen.
+    pub current_image: usize,
+    pub total_images: usize,
+    /// False in the Enter viewer, which only moves when the user steps through it.
+    pub auto_advance: bool,
+    pub rating: u8,
+}
+
+/// Stars for the full-screen status bar: filled for the rating, hollow for the rest.
+///
+/// Always `MAX_RATING` stars wide so the centred status line does not jump when the image
+/// is rated, and so an unrated image still reads as "no stars" rather than a missing field.
+fn rating_stars(rating: u8) -> String {
+    let filled = rating.min(MAX_RATING) as usize;
+    let empty = MAX_RATING as usize - filled;
+    format!("{}{}", "\u{2605}".repeat(filled), "\u{2606}".repeat(empty))
+}
+
+/// The status line under a full-screen image, fitted to `width` columns.
+///
+/// The rating is labelled when there is room; on a narrow terminal the label goes first,
+/// since the stars alone are still unambiguous next to an image.
+fn slideshow_status_text(
+    localization: &Localization,
+    status: SlideshowStatus,
+    width: usize,
+) -> String {
+    let mode = localization.get(if status.auto_advance {
+        "slideshow_mode"
+    } else {
+        "viewer_mode"
+    });
+    let position = format!(
+        "{} {}/{}",
+        localization.get("slideshow_image"),
+        status.current_image,
+        status.total_images
+    );
+    let stars = rating_stars(status.rating);
+    let hint = localization.get("slideshow_press_any_key");
+
+    let labelled = format!(
+        "[>] {} | {} | {}: {} | {}",
+        mode,
+        position,
+        localization.get("rating_label"),
+        stars,
+        hint
+    );
+    if Span::from(labelled.as_str()).width() <= width {
+        return labelled;
+    }
+    format!("[>] {} | {} | {} | {}", mode, position, stars, hint)
 }
 
 /// The rating prefix for a file list row: a star and a digit when rated, blanks when not.
@@ -544,9 +603,7 @@ impl UIRenderer {
         area: Rect,
         preview_content: Option<&PreviewContent>,
         localization: &Localization,
-        current_image: usize,
-        total_images: usize,
-        auto_advance: bool,
+        status: SlideshowStatus,
     ) {
         // Create full-screen slideshow layout with status bar at bottom
         let chunks = Layout::default()
@@ -650,17 +707,10 @@ impl UIRenderer {
         // Render status bar - clear first to avoid artifacts from Kitty graphics
         f.render_widget(Clear, chunks[1]);
 
-        let status_text = format!(
-            "[>] {} | {} {}/{} | {}",
-            localization.get(if auto_advance {
-                "slideshow_mode"
-            } else {
-                "viewer_mode"
-            }),
-            localization.get("slideshow_image"),
-            current_image,
-            total_images,
-            localization.get("slideshow_press_any_key")
+        let status_text = slideshow_status_text(
+            localization,
+            status,
+            chunks[1].width.saturating_sub(2) as usize,
         );
 
         let status_block = Block::default()
@@ -909,6 +959,91 @@ mod tests {
     use crate::test_utils::helpers::*;
     use ratatui::layout::Rect;
     use ratatui::text::Text;
+
+    #[test]
+    fn rating_stars_are_always_five_wide() {
+        assert_eq!(rating_stars(0), "\u{2606}".repeat(5));
+        assert_eq!(rating_stars(3), "\u{2605}\u{2605}\u{2605}\u{2606}\u{2606}");
+        assert_eq!(rating_stars(5), "\u{2605}".repeat(5));
+        assert_eq!(rating_stars(9), "\u{2605}".repeat(5));
+    }
+
+    #[test]
+    fn slideshow_status_labels_the_rating_when_there_is_room() {
+        let localization = Localization::new("en").unwrap();
+        let text = slideshow_status_text(
+            &localization,
+            SlideshowStatus {
+                current_image: 2,
+                total_images: 7,
+                auto_advance: false,
+                rating: 3,
+            },
+            200,
+        );
+        assert!(text.contains("Image Viewer"));
+        assert!(text.contains("Image 2/7"));
+        assert!(text.contains("Rating: \u{2605}\u{2605}\u{2605}\u{2606}\u{2606}"));
+    }
+
+    #[test]
+    fn slideshow_status_drops_the_label_before_the_stars() {
+        let localization = Localization::new("en").unwrap();
+        let wide = slideshow_status_text(
+            &localization,
+            SlideshowStatus {
+                current_image: 2,
+                total_images: 7,
+                auto_advance: false,
+                rating: 3,
+            },
+            200,
+        );
+        let narrow_width = Span::from(wide.as_str()).width() - 1;
+        let text = slideshow_status_text(
+            &localization,
+            SlideshowStatus {
+                current_image: 2,
+                total_images: 7,
+                auto_advance: false,
+                rating: 3,
+            },
+            narrow_width,
+        );
+        assert!(!text.contains("Rating"));
+        assert!(text.contains("\u{2605}\u{2605}\u{2605}\u{2606}\u{2606}"));
+    }
+
+    #[test]
+    fn render_slideshow_shows_the_rating_in_the_status_bar() {
+        use ratatui::{Terminal, backend::TestBackend};
+        let localization = Localization::new("en").unwrap();
+        let mut term = Terminal::new(TestBackend::new(120, 20)).unwrap();
+        term.draw(|f| {
+            UIRenderer::render_slideshow(
+                f,
+                f.area(),
+                None,
+                &localization,
+                SlideshowStatus {
+                    current_image: 1,
+                    total_images: 3,
+                    auto_advance: false,
+                    rating: 4,
+                },
+            )
+        })
+        .unwrap();
+        let screen: String = term
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(screen.contains("Rating:"));
+        assert!(screen.contains("\u{2605}\u{2605}\u{2605}\u{2605}\u{2606}"));
+    }
 
     #[test]
     fn test_ui_layout_creation() {
@@ -1174,7 +1309,18 @@ mod tests {
 
         terminal
             .draw(|f| {
-                UIRenderer::render_slideshow(f, area, Some(&preview), &localization, 3, 10, true);
+                UIRenderer::render_slideshow(
+                    f,
+                    area,
+                    Some(&preview),
+                    &localization,
+                    SlideshowStatus {
+                        current_image: 3,
+                        total_images: 10,
+                        auto_advance: true,
+                        rating: 0,
+                    },
+                );
             })
             .unwrap();
     }

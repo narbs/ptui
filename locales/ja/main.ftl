@@ -32,6 +32,7 @@ image_file_prefix = 画像:
 slideshow_mode = スライドショーモード
 viewer_mode = 画像ビューア
 slideshow_image = 画像
+rating_label = 評価
 slideshow_press_any_key = 任意のキーを押して終了
 messages = メッセージ
 ptui_ready = PTUI 準備完了...
