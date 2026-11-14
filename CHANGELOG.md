@@ -4,6 +4,14 @@ PTUI - Picture TUI - CHANGELOG
 Nov 13, 2026
 ------------
 
+PTUI 2.7.6 released. The status bar under a full-screen image, in the Enter viewer and in a
+slideshow, now shows the image's file name, which changes as you step through the images. When
+the terminal is too narrow for everything, the "Rating:" label is left off first and then the file
+name, keeping the image count and the stars.
+
+Nov 13, 2026
+------------
+
 PTUI 2.7.5 released. On macOS, rating an image no longer prints "Using graphical mode with
 protocol: Kitty" over the screen or redraws the image. Saving a rating writes ptui's state file,
 which on macOS sits next to ptui.json, and ptui mistook that for an edit to its config and
