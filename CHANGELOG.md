@@ -4,6 +4,14 @@ PTUI - Picture TUI - CHANGELOG
 Nov 13, 2026
 ------------
 
+PTUI 2.7.5 released. On macOS, rating an image no longer prints "Using graphical mode with
+protocol: Kitty" over the screen or redraws the image. Saving a rating writes ptui's state file,
+which on macOS sits next to ptui.json, and ptui mistook that for an edit to its config and
+reloaded it. ptui now reloads its config only when ptui.json itself changes.
+
+Nov 13, 2026
+------------
+
 PTUI 2.7.4 released. The status bar under a full-screen image, in the Enter viewer and in a
 slideshow, now shows the image's rating as five stars, filled for the rating and hollow for the
 rest, so an unrated image shows five hollow stars. Rating the image with 0-5 or * updates the
