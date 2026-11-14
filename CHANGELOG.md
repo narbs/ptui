@@ -1,6 +1,14 @@
 PTUI - Picture TUI - CHANGELOG
 ==============================
 
+Nov 13, 2026
+------------
+
+PTUI 2.7.4 released. The status bar under a full-screen image, in the Enter viewer and in a
+slideshow, now shows the image's rating as five stars, filled for the rating and hollow for the
+rest, so an unrated image shows five hollow stars. Rating the image with 0-5 or * updates the
+stars straight away. On a narrow terminal the "Rating:" label is left off and only the stars shown.
+
 Oct 16, 2026
 ------------
 
