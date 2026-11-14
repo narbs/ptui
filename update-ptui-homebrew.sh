@@ -103,6 +103,28 @@ if ! grep -qF "url \"${DOWNLOAD_URL}\"" "$FORMULA_FILE" || ! grep -qF "sha256 \"
 fi
 
 git diff
+
+# Run the same style and audit checks the tap's CI runs (`brew test-bot --only-tap-syntax`),
+# so a formula CI would reject never gets pushed. brew audit takes a formula name, which
+# resolves to brew's own copy of the tap, so it is skipped when PTUI_TAP_DIR points elsewhere.
+if command -v brew &>/dev/null; then
+  echo "Checking the formula (brew style, brew audit)..."
+  CHECK_FAILED=false
+  brew style "$FORMULA_FILE" || CHECK_FAILED=true
+  if [ "$(cd "$(brew --repository "$TAP" 2>/dev/null)" 2>/dev/null && pwd -P)" = "$(pwd -P)" ]; then
+    brew audit --strict --online --formula narbs/tap/narbs-ptui || CHECK_FAILED=true
+  else
+    echo "Skipping brew audit: ${TAP_DIR} is not brew's copy of ${TAP}"
+  fi
+  if [ "$CHECK_FAILED" = true ]; then
+    git checkout -- "$FORMULA_FILE"
+    echo "Error: the formula failed brew's checks above; the tap was left unchanged." >&2
+    exit 1
+  fi
+else
+  echo "Warning: brew not found; skipping brew style and brew audit" >&2
+fi
+
 git add "$FORMULA_FILE"
 git commit --quiet -m "Update ptui to v${VERSION}"
 echo "Committed: Update ptui to v${VERSION}"

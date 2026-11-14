@@ -13,6 +13,7 @@
 #   5. Publish the GitHub release and upload the Linux binary
 #   6. Update and push the AUR repo (only after the binary exists, so source= resolves)
 #   7. Update and push the Homebrew tap (update-ptui-homebrew.sh)
+#   8. Wait for the tap's brew test-bot CI on that push (check-homebrew-ci.sh)
 #
 # The macOS binary is built separately on a Mac; upload it to the same release afterwards.
 
@@ -314,6 +315,22 @@ update_homebrew_tap() {
   fi
 }
 
+# Function to wait for the tap's brew test-bot CI on the push just made. Like the tap update,
+# a failure is reported rather than failing the release: everything is published by now.
+check_homebrew_ci() {
+  if [ "$DRY_RUN" = true ]; then
+    echo_dry "Would run ./check-homebrew-ci.sh to wait for the Homebrew tap's CI"
+    return
+  fi
+
+  echo_info "Waiting for the Homebrew tap's CI (brew test-bot)..."
+  if ! ./check-homebrew-ci.sh; then
+    echo_warn "Homebrew tap CI did not pass. Fix the tap, then check again with:"
+    echo_warn "  ./check-homebrew-ci.sh"
+    return 1
+  fi
+}
+
 # Main execution
 main() {
 
@@ -372,6 +389,12 @@ main() {
   local homebrew_ok=true
   update_homebrew_tap "$new_version" || homebrew_ok=false
 
+  # 8. Check the tap's CI on that push (only if the tap was updated)
+  local homebrew_ci_ok=true
+  if [ "$homebrew_ok" = true ]; then
+    check_homebrew_ci || homebrew_ci_ok=false
+  fi
+
   if [ "$DRY_RUN" = true ]; then
     echo ""
     echo_dry "Dry run completed! Here's what would happen in a real release:"
@@ -380,7 +403,7 @@ main() {
     echo_dry "- Committed, tagged v$new_version, pushed branch + tag"
     echo_dry "- GitHub release v$new_version created with the Linux binary"
     echo_dry "- AUR package updated and pushed"
-    echo_dry "- Homebrew tap updated and pushed"
+    echo_dry "- Homebrew tap updated and pushed, and its CI checked"
     echo_dry ""
     echo_dry "To perform the actual release, run: ./release.sh --patch|--minor|--major"
     # Restore Cargo.toml/Cargo.lock so a dry run leaves the working tree clean
@@ -393,6 +416,9 @@ main() {
     else
       echo_info "Pushed: branch, tag v$new_version, GitHub release (Linux binary) and AUR."
       echo_warn "The Homebrew tap was NOT updated - see the warning above."
+    fi
+    if [ "$homebrew_ok" = true ] && [ "$homebrew_ci_ok" = false ]; then
+      echo_warn "The Homebrew tap's CI FAILED for v$new_version - see the warning above."
     fi
     echo_warn "macOS binary is built separately. On a Mac, run:"
     echo_warn "  ./release-mac.sh"
