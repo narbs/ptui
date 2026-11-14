@@ -232,14 +232,15 @@ mod tests {
         assert_eq!(PTuiState::load_from(&path), PTuiState::default());
     }
 
+    /// On macOS the state file shares a directory with ptui.json, which the config watcher
+    /// watches; it is told apart by name, so the two names must never coincide.
     #[test]
-    fn test_state_path_is_outside_config_dir() {
-        if let (Some(state_path), Some(config_dir)) = (PTuiState::state_path(), dirs::config_dir())
-        {
-            assert!(
-                !state_path.starts_with(config_dir),
-                "state file must not live in the watched config directory"
-            );
+    fn test_state_file_is_not_named_like_the_config_file() {
+        if let (Some(state_path), Ok(config_path)) = (
+            PTuiState::state_path(),
+            crate::config::PTuiConfig::get_config_path(),
+        ) {
+            assert_ne!(state_path.file_name(), config_path.file_name());
         }
     }
     #[test]

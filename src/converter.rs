@@ -172,7 +172,8 @@ impl GraphicalConverter {
         true
     }
 
-    #[cfg_attr(all(test, feature = "debug-output"), allow(dead_code))]
+    // Only the debug-output build reports the protocol.
+    #[cfg_attr(not(feature = "debug-output"), allow(dead_code))]
     pub fn get_protocol_type(&self) -> &ProtocolType {
         &self.protocol_type
     }
@@ -204,12 +205,15 @@ pub fn create_converter(config: &PTuiConfig) -> Box<dyn AsciiConverter> {
         "graphical" => {
             match GraphicalConverter::new(config.converter.chafa.clone()) {
                 Ok(converter) => {
-                    // The attribute that used to sit here applied `allow(dead_code)` to a
-                    // macro invocation, where it does nothing but raise a warning of its own.
-                    eprintln!(
-                        "Using graphical mode with protocol: {:?}",
-                        converter.get_protocol_type()
-                    );
+                    // stderr is the terminal the TUI is drawn on, so this would print over
+                    // it whenever the converter is recreated. Debug builds send it to a log.
+                    #[cfg(feature = "debug-output")]
+                    {
+                        eprintln!(
+                            "Using graphical mode with protocol: {:?}",
+                            converter.get_protocol_type()
+                        );
+                    }
                     Box::new(converter)
                 }
                 Err(e) => {

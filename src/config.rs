@@ -14,6 +14,15 @@ const DEFAULT_LOCALE: &str = "en";
 // This prevents thread contention when multiple tests access the home directory simultaneously
 static CONFIG_DIR: LazyLock<Option<PathBuf>> = LazyLock::new(dirs::config_dir);
 
+/// True when `event` is a content change to the config file at `config_path`.
+fn is_config_change(event: &Event, config_path: &Path) -> bool {
+    matches!(event.kind, EventKind::Modify(ModifyKind::Data(_)))
+        && event
+            .paths
+            .iter()
+            .any(|p| p.file_name() == config_path.file_name())
+}
+
 fn get_config_dir() -> Result<PathBuf, Box<dyn Error>> {
     match CONFIG_DIR.as_ref() {
         Some(dir) => Ok(dir.clone()),
@@ -321,8 +330,11 @@ impl PTuiConfig {
                 match notify::recommended_watcher(move |res: Result<Event, notify::Error>| {
                     match res {
                         Ok(event) => {
-                            // Only react to modify events (file content changes)
-                            if let EventKind::Modify(ModifyKind::Data(_)) = event.kind {
+                            // Only react to content changes to ptui.json itself. The watch is
+                            // on the whole directory, which on macOS also holds state.json
+                            // (config and data dirs are both Application Support), and saving
+                            // state on every rating must not reload the config.
+                            if is_config_change(&event, &config_path_clone) {
                                 // Small delay to ensure file write is complete
                                 thread::sleep(Duration::from_millis(100));
 
@@ -378,6 +390,37 @@ impl PTuiConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn modify_event(path: &str) -> Event {
+        Event::new(EventKind::Modify(ModifyKind::Data(
+            notify::event::DataChange::Content,
+        )))
+        .add_path(PathBuf::from(path))
+    }
+
+    #[test]
+    fn watcher_reacts_to_the_config_file() {
+        let config = Path::new("/support/ptui/ptui.json");
+        let event = modify_event("/support/ptui/ptui.json");
+        assert!(is_config_change(&event, config));
+    }
+
+    /// Saving state.json, which on macOS sits next to ptui.json, used to reload the config
+    /// on every rating and print over the screen.
+    #[test]
+    fn watcher_ignores_other_files_in_the_config_directory() {
+        let config = Path::new("/support/ptui/ptui.json");
+        let event = modify_event("/support/ptui/state.json");
+        assert!(!is_config_change(&event, config));
+    }
+
+    #[test]
+    fn watcher_ignores_events_that_do_not_change_content() {
+        let config = Path::new("/support/ptui/ptui.json");
+        let access = Event::new(EventKind::Access(notify::event::AccessKind::Any))
+            .add_path(PathBuf::from("/support/ptui/ptui.json"));
+        assert!(!is_config_change(&access, config));
+    }
     use crate::test_utils::helpers::*;
     use std::fs;
     use tempfile::TempDir;
