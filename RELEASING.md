@@ -97,11 +97,23 @@ it by hand:
     ./check-homebrew-ci.sh <commit>   # or a given tap commit
 
 Pushes to the tap's `main` check setup and syntax only. The formula itself is built and tested
-(`brew test-bot --only-formulae`) only on pull requests, so a change to the formula's build,
-such as a new dependency, is worth making as a pull request to the tap first.
+(`brew test-bot --only-formulae`) only on pull requests, and only on those that change the
+formula: a pull request touching just the workflows builds nothing. Release pushes therefore
+never build it, which is how a missing `pkgconf` build dependency went unnoticed until 2.7.6.
+A change to the formula's build, such as a new dependency, is worth making as a pull request to
+the tap first.
 
 Running `brew doctor` on your own machine is not a stand-in: it checks your Homebrew install,
-not the clean one CI uses.
+not the clean one CI uses. Run the Linux checks locally in CI's own container instead:
+
+    ./check-homebrew-linux.sh                 # setup, syntax, and a full build + test (~10 min)
+    ./check-homebrew-linux.sh --syntax-only   # setup and syntax only (~1 min)
+
+It runs `brew test-bot`'s Linux steps in `ghcr.io/homebrew/brew:main` against the tap as it is
+on disk, uncommitted changes included, and never modifies it. Run it before pushing a change to
+how the formula builds. It needs Docker without sudo (membership of the `docker` group). It is
+not part of `release.sh`, since it takes about ten minutes and a version bump alone does not
+change how the formula builds.
 
 Step 3 - macOS build
 --------------------
