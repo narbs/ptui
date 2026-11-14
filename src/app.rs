@@ -610,11 +610,8 @@ impl ChafaTui {
             .map(|f| f.name.as_str())
     }
 
-    /// Name of the image the slideshow is showing, or None outside a slideshow, for tests
-    /// that drive the app through its keys. The binary compiles this module too and never
-    /// calls it.
-    #[doc(hidden)]
-    #[allow(dead_code)]
+    /// Name of the image the slideshow is showing, or None outside a slideshow. Shown in the
+    /// full-screen status bar, and used by tests that drive the app through its keys.
     pub fn slideshow_file_name(&self) -> Option<&str> {
         if !self.is_slideshow_mode {
             return None;
@@ -1386,6 +1383,7 @@ impl ChafaTui {
                 display_content,
                 &self.localization,
                 SlideshowStatus {
+                    file_name: self.slideshow_file_name(),
                     current_image: self.slideshow_current_index + 1,
                     total_images: self.slideshow_image_files.len(),
                     auto_advance: self.slideshow_auto_advance,

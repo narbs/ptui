@@ -193,7 +193,9 @@ pub fn shorten_path_text(text: &str, max_chars: usize) -> String {
 
 /// What the status bar under a full-screen image reports.
 #[derive(Debug, Clone, Copy)]
-pub struct SlideshowStatus {
+pub struct SlideshowStatus<'a> {
+    /// Name of the image on screen, shown when the terminal is wide enough.
+    pub file_name: Option<&'a str>,
     /// 1-based position of the image on screen.
     pub current_image: usize,
     pub total_images: usize,
@@ -214,8 +216,9 @@ fn rating_stars(rating: u8) -> String {
 
 /// The status line under a full-screen image, fitted to `width` columns.
 ///
-/// The rating is labelled when there is room; on a narrow terminal the label goes first,
-/// since the stars alone are still unambiguous next to an image.
+/// As the terminal narrows, parts are dropped in order of how little they are missed: the
+/// "Rating:" label first, since the stars alone are unambiguous next to an image, then the
+/// file name. The mode, position, stars and key hint always stay.
 fn slideshow_status_text(
     localization: &Localization,
     status: SlideshowStatus,
@@ -235,18 +238,24 @@ fn slideshow_status_text(
     let stars = rating_stars(status.rating);
     let hint = localization.get("slideshow_press_any_key");
 
-    let labelled = format!(
-        "[>] {} | {} | {}: {} | {}",
-        mode,
-        position,
-        localization.get("rating_label"),
-        stars,
-        hint
-    );
-    if Span::from(labelled.as_str()).width() <= width {
-        return labelled;
-    }
-    format!("[>] {} | {} | {} | {}", mode, position, stars, hint)
+    let labelled_stars = format!("{}: {}", localization.get("rating_label"), stars);
+    let line = |name: Option<&str>, rating: &str| match name {
+        Some(name) => format!(
+            "[>] {} | {} | {} | {} | {}",
+            mode, position, name, rating, hint
+        ),
+        None => format!("[>] {} | {} | {} | {}", mode, position, rating, hint),
+    };
+
+    let candidates = [
+        line(status.file_name, &labelled_stars),
+        line(status.file_name, &stars),
+        line(None, &labelled_stars),
+    ];
+    candidates
+        .into_iter()
+        .find(|text| Span::from(text.as_str()).width() <= width)
+        .unwrap_or_else(|| line(None, &stars))
 }
 
 /// The rating prefix for a file list row: a star and a digit when rated, blanks when not.
@@ -968,50 +977,60 @@ mod tests {
         assert_eq!(rating_stars(9), "\u{2605}".repeat(5));
     }
 
-    #[test]
-    fn slideshow_status_labels_the_rating_when_there_is_room() {
-        let localization = Localization::new("en").unwrap();
-        let text = slideshow_status_text(
-            &localization,
-            SlideshowStatus {
-                current_image: 2,
-                total_images: 7,
-                auto_advance: false,
-                rating: 3,
-            },
-            200,
-        );
-        assert!(text.contains("Image Viewer"));
-        assert!(text.contains("Image 2/7"));
-        assert!(text.contains("Rating: \u{2605}\u{2605}\u{2605}\u{2606}\u{2606}"));
+    const THREE_STARS: &str = "\u{2605}\u{2605}\u{2605}\u{2606}\u{2606}";
+
+    fn viewer_status(file_name: Option<&str>) -> SlideshowStatus<'_> {
+        SlideshowStatus {
+            file_name,
+            current_image: 2,
+            total_images: 7,
+            auto_advance: false,
+            rating: 3,
+        }
+    }
+
+    fn columns(text: &str) -> usize {
+        Span::from(text).width()
     }
 
     #[test]
-    fn slideshow_status_drops_the_label_before_the_stars() {
+    fn slideshow_status_shows_everything_when_there_is_room() {
         let localization = Localization::new("en").unwrap();
-        let wide = slideshow_status_text(
-            &localization,
-            SlideshowStatus {
-                current_image: 2,
-                total_images: 7,
-                auto_advance: false,
-                rating: 3,
-            },
-            200,
-        );
-        let narrow_width = Span::from(wide.as_str()).width() - 1;
-        let text = slideshow_status_text(
-            &localization,
-            SlideshowStatus {
-                current_image: 2,
-                total_images: 7,
-                auto_advance: false,
-                rating: 3,
-            },
-            narrow_width,
-        );
+        let text = slideshow_status_text(&localization, viewer_status(Some("beach.jpg")), 200);
+        assert!(text.contains("Image Viewer"));
+        assert!(text.contains("Image 2/7"));
+        assert!(text.contains("beach.jpg"));
+        assert!(text.contains(&format!("Rating: {THREE_STARS}")));
+    }
+
+    #[test]
+    fn slideshow_status_drops_the_label_before_the_file_name() {
+        let localization = Localization::new("en").unwrap();
+        let status = viewer_status(Some("beach.jpg"));
+        let full = slideshow_status_text(&localization, status, 200);
+        let text = slideshow_status_text(&localization, status, columns(&full) - 1);
         assert!(!text.contains("Rating"));
-        assert!(text.contains("\u{2605}\u{2605}\u{2605}\u{2606}\u{2606}"));
+        assert!(text.contains("beach.jpg"));
+        assert!(text.contains(THREE_STARS));
+    }
+
+    #[test]
+    fn slideshow_status_drops_the_file_name_before_the_stars() {
+        let localization = Localization::new("en").unwrap();
+        let status = viewer_status(Some("a-long-holiday-photo-name.jpg"));
+        let without_label =
+            slideshow_status_text(&localization, status, 200).replace("Rating: ", "");
+        let text = slideshow_status_text(&localization, status, columns(&without_label) - 1);
+        assert!(!text.contains("a-long-holiday-photo-name.jpg"));
+        assert!(text.contains(THREE_STARS));
+        assert!(text.contains("Image 2/7"));
+    }
+
+    #[test]
+    fn slideshow_status_without_a_name_still_labels_the_rating() {
+        let localization = Localization::new("en").unwrap();
+        let text = slideshow_status_text(&localization, viewer_status(None), 200);
+        assert!(text.contains(&format!("Rating: {THREE_STARS}")));
     }
 
     #[test]
@@ -1026,6 +1045,7 @@ mod tests {
                 None,
                 &localization,
                 SlideshowStatus {
+                    file_name: None,
                     current_image: 1,
                     total_images: 3,
                     auto_advance: false,
@@ -1315,6 +1335,7 @@ mod tests {
                     Some(&preview),
                     &localization,
                     SlideshowStatus {
+                        file_name: None,
                         current_image: 3,
                         total_images: 10,
                         auto_advance: true,
