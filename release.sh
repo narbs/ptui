@@ -12,8 +12,8 @@
 #   4. Commit + tag, push the branch and the tag
 #   5. Publish the GitHub release and upload the Linux binary
 #   6. Update and push the AUR repo (only after the binary exists, so source= resolves)
-#   7. Update and push the Homebrew tap (update-ptui-homebrew.sh)
-#   8. Wait for the tap's brew test-bot CI on that push (check-homebrew-ci.sh)
+#   7. Update the Homebrew tap through a pull request, merged once the tap's CI has built and
+#      tested the formula (update-ptui-homebrew.sh, which waits with check-homebrew-ci.sh)
 #
 # The macOS binary is built separately on a Mac; upload it to the same release afterwards.
 
@@ -297,36 +297,22 @@ update_aur_repo() {
   )
 }
 
-# Function to update the Homebrew tap. Everything else is published by now, so a failure here
-# is reported with the command to re-run rather than failing the release.
+# Function to update the Homebrew tap through a PR that is merged once its CI has built and
+# tested the formula. Everything else is published by now, so a failure here is reported with
+# the command to re-run rather than failing the release. A PR whose CI failed stays open.
 update_homebrew_tap() {
   local version=$1
 
   if [ "$DRY_RUN" = true ]; then
-    echo_dry "Would run ./update-ptui-homebrew.sh $version to update, commit and push the Homebrew tap"
+    echo_dry "Would run ./update-ptui-homebrew.sh $version to open a Homebrew tap PR, wait for its CI to build and test the formula, and merge it"
     return
   fi
 
-  echo_info "Updating the Homebrew tap..."
+  echo_info "Updating the Homebrew tap (pull request, CI build and test, merge)..."
   if ! ./update-ptui-homebrew.sh "$version"; then
-    echo_warn "Homebrew tap update failed. Fix the problem above, then run:"
+    echo_warn "Homebrew tap update failed, so it was not merged. Fix the problem above (if CI"
+    echo_warn "failed, push the fix to the PR's branch), then run:"
     echo_warn "  ./update-ptui-homebrew.sh $version"
-    return 1
-  fi
-}
-
-# Function to wait for the tap's brew test-bot CI on the push just made. Like the tap update,
-# a failure is reported rather than failing the release: everything is published by now.
-check_homebrew_ci() {
-  if [ "$DRY_RUN" = true ]; then
-    echo_dry "Would run ./check-homebrew-ci.sh to wait for the Homebrew tap's CI"
-    return
-  fi
-
-  echo_info "Waiting for the Homebrew tap's CI (brew test-bot)..."
-  if ! ./check-homebrew-ci.sh; then
-    echo_warn "Homebrew tap CI did not pass. Fix the tap, then check again with:"
-    echo_warn "  ./check-homebrew-ci.sh"
     return 1
   fi
 }
@@ -385,15 +371,9 @@ main() {
   # 6. Update and push the AUR repo (now that the binary exists)
   update_aur_repo "$new_version"
 
-  # 7. Update and push the Homebrew tap (needs the tag on GitHub, pushed in step 4)
+  # 7. Update the Homebrew tap via a PR merged after CI (needs the tag on GitHub, from step 4)
   local homebrew_ok=true
   update_homebrew_tap "$new_version" || homebrew_ok=false
-
-  # 8. Check the tap's CI on that push (only if the tap was updated)
-  local homebrew_ci_ok=true
-  if [ "$homebrew_ok" = true ]; then
-    check_homebrew_ci || homebrew_ci_ok=false
-  fi
 
   if [ "$DRY_RUN" = true ]; then
     echo ""
@@ -403,7 +383,7 @@ main() {
     echo_dry "- Committed, tagged v$new_version, pushed branch + tag"
     echo_dry "- GitHub release v$new_version created with the Linux binary"
     echo_dry "- AUR package updated and pushed"
-    echo_dry "- Homebrew tap updated and pushed, and its CI checked"
+    echo_dry "- Homebrew tap PR opened, built and tested by its CI, and merged"
     echo_dry ""
     echo_dry "To perform the actual release, run: ./release.sh --patch|--minor|--major"
     # Restore Cargo.toml/Cargo.lock so a dry run leaves the working tree clean
@@ -412,13 +392,10 @@ main() {
   else
     echo_info "Release v$new_version completed successfully!"
     if [ "$homebrew_ok" = true ]; then
-      echo_info "Pushed: branch, tag v$new_version, GitHub release (Linux binary), AUR and Homebrew tap."
+      echo_info "Published: branch, tag v$new_version, GitHub release (Linux binary), AUR and Homebrew tap."
     else
-      echo_info "Pushed: branch, tag v$new_version, GitHub release (Linux binary) and AUR."
+      echo_info "Published: branch, tag v$new_version, GitHub release (Linux binary) and AUR."
       echo_warn "The Homebrew tap was NOT updated - see the warning above."
-    fi
-    if [ "$homebrew_ok" = true ] && [ "$homebrew_ci_ok" = false ]; then
-      echo_warn "The Homebrew tap's CI FAILED for v$new_version - see the warning above."
     fi
     echo_warn "macOS binary is built separately. On a Mac, run:"
     echo_warn "  ./release-mac.sh"

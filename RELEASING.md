@@ -16,7 +16,8 @@ Prerequisites
   counts *untracked* files. Commit, ignore, or `git stash -u` anything left over first.
 - **The Homebrew tap** (`brew tap narbs/homebrew-tap`, on Linux at
   `/home/linuxbrew/.linuxbrew/Homebrew/Library/Taps/narbs/homebrew-tap`) with no uncommitted
-  changes, and push access to it.
+  changes, and push access to it. `gh` must be logged in with access to open and merge its
+  pull requests.
 
 Before you start
 ----------------
@@ -50,12 +51,11 @@ The script:
    CHANGELOG.md entry.
 6. Copies the PKGBUILD into `../ptui-aur`, regenerates `.SRCINFO`, then commits and pushes
    the AUR repository. This comes after step 5 so the PKGBUILD's `source=` already resolves.
-7. Runs `update-ptui-homebrew.sh` to update, commit and push the Homebrew tap (see Step 2).
-   Everything else is published by then, so if this fails the release still finishes, with a
-   warning and the command to re-run.
-8. Runs `check-homebrew-ci.sh`, which waits for the tap's `brew test-bot` run on that push
-   and fails if it does (see Step 2). As with step 7, a failure is a warning at the end of
-   the release, with the run's URL.
+7. Runs `update-ptui-homebrew.sh`, which opens a pull request to the Homebrew tap, waits for
+   its CI to build and test the formula on Linux and macOS, and merges it (see Step 2). This
+   takes 10-20 minutes. Everything else is published by then, so if this fails the release
+   still finishes, with a warning and the command to re-run; a PR whose CI failed is left
+   open and unmerged, so Homebrew users stay on the previous version.
 
 To rehearse without committing or pushing anything:
 
@@ -70,38 +70,53 @@ Step 2 - The Homebrew tap
 `release.sh` does this for you; run it by hand only to retry after a failure. It needs the tag
 to be on GitHub, since it downloads the tag tarball.
 
-    ./update-ptui-homebrew.sh            # version from Cargo.toml
-    ./update-ptui-homebrew.sh 2.7.0      # or a given version
-    ./update-ptui-homebrew.sh --no-push  # commit in the tap but do not push
+    ./update-ptui-homebrew.sh             # version from Cargo.toml
+    ./update-ptui-homebrew.sh 2.7.0       # or a given version
+    ./update-ptui-homebrew.sh --no-merge  # open the PR and wait for CI, but do not merge
+    ./update-ptui-homebrew.sh --no-push   # commit on a branch in the tap, push nothing
 
 The script finds the tap with `brew --repository narbs/homebrew-tap`, refuses to run if the tap
-has uncommitted changes, and pulls it. It then downloads
+has uncommitted changes, and checks out and pulls `main`. It then downloads
 `https://github.com/narbs/ptui/archive/refs/tags/vX.Y.Z.tar.gz`, computes its SHA256, updates
-`Formula/narbs-ptui.rb`, checks that both the url and sha256 were replaced, prints the diff, and
-commits and pushes the tap as `Update ptui to vX.Y.Z`. If the formula is already at that version
-it does nothing, so it is safe to re-run.
+`Formula/narbs-ptui.rb`, checks that both the url and sha256 were replaced, and prints the diff.
 
 Before committing, it runs `brew style` and `brew audit --strict --online` on the new formula,
 the same checks as the tap CI's `brew test-bot --only-tap-syntax`. If either fails, it puts the
 formula back and stops without committing or pushing.
 
+It then commits `Update ptui to vX.Y.Z` on a branch `narbs-ptui-X.Y.Z`, pushes it, and opens a
+pull request titled `narbs-ptui X.Y.Z`. It waits for the PR's CI with `check-homebrew-ci.sh
+--formula narbs/tap/narbs-ptui` (see below), and when every job has built and tested the
+formula it squash-merges the PR, deletes the branch, and pulls `main`. The local tap is left on
+`main` throughout, since `brew doctor` objects to a tap on another branch.
+
+If CI fails or times out, the PR stays open and the script exits 1. Push a fix to the PR's
+branch (or wait), then re-run the script with the same version: it finds the open PR and
+checks and merges that instead of opening another. If the formula on `main` is already at that
+version it does nothing, so it is always safe to re-run.
+
 ### The tap's CI
 
-Every push to the tap runs `brew test-bot` (`.github/workflows/tests.yml` in the tap) on Linux
-and two macOS versions, against the latest Homebrew. It can fail for reasons no local check
+Every push and pull request to the tap runs `brew test-bot` (`.github/workflows/tests.yml` in the tap) on Linux
+and macOS 26, against the latest Homebrew. It can fail for reasons no local check
 covers: from 2.3.0 to 2.7.6 every run failed in `brew doctor` because the Linux runner's glibc
-was too old for Homebrew, and nothing reported it. `release.sh` now checks the run; to check
-it by hand:
+was too old for Homebrew, and nothing reported it. To check a run by hand:
 
-    ./check-homebrew-ci.sh            # the run for the tap's current HEAD
-    ./check-homebrew-ci.sh <commit>   # or a given tap commit
+    ./check-homebrew-ci.sh                                    # the run for the tap's HEAD
+    ./check-homebrew-ci.sh <commit>                           # or a given tap commit
+    ./check-homebrew-ci.sh --formula narbs/tap/narbs-ptui <pr-head-commit>
 
 Pushes to the tap's `main` check setup and syntax only. The formula itself is built and tested
 (`brew test-bot --only-formulae`) only on pull requests, and only on those that change the
-formula: a pull request touching just the workflows builds nothing. Release pushes therefore
-never build it, which is how a missing `pkgconf` build dependency went unnoticed until 2.7.6.
-A change to the formula's build, such as a new dependency, is worth making as a pull request to
-the tap first.
+formula: a pull request touching just the workflows builds nothing. That is why releases go
+through a pull request: until 2.7.6 they were pushed straight to `main`, never built, and a
+missing `pkgconf` build dependency went unnoticed. Make any other change to the formula as a
+pull request too.
+
+A green run alone does not prove the formula was built: test-bot also goes green when it
+skips a formula, or with a failed step "ignored" (a linkage failure was, once). `--formula`
+reads every job's log and passes only if each one ran `brew install --build-bottle` and
+`brew test` for the formula, with nothing FAILED, SKIPPED or ignored.
 
 Running `brew doctor` on your own machine is not a stand-in: it checks your Homebrew install,
 not the clean one CI uses. Run the Linux checks locally in CI's own container instead:
