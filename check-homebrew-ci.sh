@@ -135,7 +135,22 @@ if [ "$CONCLUSION" = "success" ]; then
 fi
 
 echo "Error: Homebrew tap CI ${CONCLUSION}: ${RUN_URL}" >&2
+# Step results can lag the run's conclusion by a few seconds, so retry until they show up
+FAILED_STEPS=""
+for _ in 1 2 3 4 5 6; do
+  FAILED_STEPS=$(gh run view "$RUN_ID" --repo "$REPO" --json jobs \
+    -q '.jobs[] | select(.conclusion == "failure") | "  \(.name): " + ([.steps[] | select(.conclusion == "failure") | .name] | join(", "))' 2>/dev/null || true)
+  [ -n "$FAILED_STEPS" ] && break
+  sleep 10
+done
 echo "Failed steps:" >&2
-gh run view "$RUN_ID" --repo "$REPO" --json jobs \
-  -q '.jobs[] | select(.conclusion == "failure") | "  \(.name): " + ([.steps[] | select(.conclusion == "failure") | .name] | join(", "))' >&2 || true
+echo "${FAILED_STEPS:-  (not reported by GitHub; see the run)}" >&2
+# The errors test-bot reported (e.g. a failed audit), without the generic exit-code lines
+ERRORS=$(gh run view "$RUN_ID" --repo "$REPO" --log-failed 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g' |
+  grep -F '##[error]' | grep -v 'Process completed with exit code' |
+  sed 's/^\([^\t]*\)\t[^\t]*\t[^ ]* ##\[error\]/  \1: /' | sort -u | head -20 || true)
+if [ -n "$ERRORS" ]; then
+  echo "Errors:" >&2
+  echo "$ERRORS" >&2
+fi
 exit 1
